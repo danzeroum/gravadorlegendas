@@ -34,5 +34,8 @@ python-dotenv>=1.0.0
 pytest>=7.4.0
 pytest-cov>=4.1.0
 
+# UI
+customtkinter>=5.2.0
+
 # Lint
 flake8>=7.0.0
