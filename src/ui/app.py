@@ -16,6 +16,38 @@ from src.main import SessionManager
 from src.translation.api import TranslatorAPI
 from src.nlp.answer_generator import LocalGenerator, APIGenerator
 from src.nlp.summarizer import Summarizer
+from src.config_store import config_store
+from src.ui.region_selector import RegionSelector
+
+
+class Tooltip:
+    """Tooltip simples para CTkButton via eventos Enter/Leave."""
+
+    def __init__(self, widget, text: str):
+        self._widget = widget
+        self._text = text
+        self._tip_window = None
+        widget.bind("<Enter>", self._enter)
+        widget.bind("<Leave>", self._leave)
+
+    def _enter(self, event=None):
+        x = self._widget.winfo_rootx() + 20
+        y = self._widget.winfo_rooty() + self._widget.winfo_height() + 5
+        self._tip_window = ctk.CTkToplevel(self._widget)
+        self._tip_window.wm_overrideredirect(True)
+        self._tip_window.wm_geometry(f"+{x}+{y}")
+        label = ctk.CTkLabel(
+            self._tip_window, text=self._text,
+            fg_color="#333333", text_color="white",
+            corner_radius=4, padx=8, pady=4,
+            font=ctk.CTkFont(size=11),
+        )
+        label.pack()
+
+    def _leave(self, event=None):
+        if self._tip_window:
+            self._tip_window.destroy()
+            self._tip_window = None
 
 
 class MainWindow:
@@ -31,12 +63,20 @@ class MainWindow:
 
         self._root = ctk.CTk()
         self._root.title("Gravador de Legendas")
-        self._root.geometry("960x680")
+        geometry = config_store.get("window_geometry", "960x680")
+        self._root.geometry(geometry)
         self._root.minsize(800, 600)
 
-        self._is_dark = False
+        theme = config_store.get("theme", "light")
+        self._is_dark = theme == "dark"
+        ctk.set_appearance_mode(theme)
+
         self._build_ui()
         self._bind_shortcuts()
+
+        saved_prefix = config_store.get("last_prefix", "legendas")
+        if hasattr(self, '_prefix_var'):
+            self._prefix_var.set(saved_prefix)
 
         self.session.on_captured = self._on_captured
         self.session.on_translated = self._on_translated
@@ -83,6 +123,7 @@ class MainWindow:
             width=120,
         )
         self._btn_start.grid(row=0, column=0, padx=6, pady=8)
+        Tooltip(self._btn_start, "Iniciar captura (Ctrl+I)")
 
         self._btn_stop = ctk.CTkButton(
             frame, text="⏹️ Parar", command=self._on_stop,
@@ -90,18 +131,21 @@ class MainWindow:
             width=120, state="disabled",
         )
         self._btn_stop.grid(row=0, column=1, padx=6, pady=8)
+        Tooltip(self._btn_stop, "Parar captura (Ctrl+P)")
 
         self._btn_summary = ctk.CTkButton(
             frame, text="📄 Resumo", command=self._on_summarize,
             width=120,
         )
         self._btn_summary.grid(row=0, column=2, padx=6, pady=8)
+        Tooltip(self._btn_summary, "Gerar resumo do texto capturado (Ctrl+S)")
 
         self._btn_answer = ctk.CTkButton(
             frame, text="💬 Responder", command=self._on_answer,
             width=120,
         )
         self._btn_answer.grid(row=0, column=3, padx=6, pady=8)
+        Tooltip(self._btn_answer, "Gerar resposta para a última pergunta (Ctrl+R)")
 
         self._status_led = ctk.CTkLabel(
             frame, text="● Parado",
@@ -234,14 +278,22 @@ class MainWindow:
             variable=self._activate_var,
         ).pack(pady=6)
 
-        ctk.CTkLabel(
+        self._region_label = ctk.CTkLabel(
             frame,
             text=f"Região: top={settings.screen_region['top']}, "
             f"left={settings.screen_region['left']}, "
             f"width={settings.screen_region['width']}, "
             f"height={settings.screen_region['height']}",
             font=ctk.CTkFont(size=11), text_color="gray",
-        ).pack(pady=(8, 4))
+        )
+        self._region_label.pack(pady=(8, 4))
+
+        self._btn_region = ctk.CTkButton(
+            frame, text="🎯 Selecionar Região",
+            command=self._on_select_region, width=200,
+        )
+        self._btn_region.pack(pady=6)
+        Tooltip(self._btn_region, "Abrir overlay para arrastar e definir a área de captura")
 
     # ========= Aba Resumo =========
     def _build_summary_tab(self):
@@ -404,6 +456,7 @@ class MainWindow:
         mode = "dark" if self._is_dark else "light"
         ctk.set_appearance_mode(mode)
         self._theme_btn.configure(text="🌙 Escuro" if not self._is_dark else "☀️ Claro")
+        config_store.set("theme", mode)
 
     # ---- Keyboard shortcuts ----
     def _bind_shortcuts(self):
@@ -462,6 +515,7 @@ class MainWindow:
         else:
             self._set_recording_state(True)
             self._file_label.configure(text=f"📁 {self.session.current_file}")
+            config_store.set("last_prefix", prefix)
 
     def _on_stop(self):
         msg = self.session.stop()
@@ -543,6 +597,19 @@ class MainWindow:
         self._hide_notification()
         self._status_led.configure(text="Resposta gerada.", text_color="#2c8c5a")
 
+    def _on_select_region(self):
+        selector = RegionSelector()
+        region = selector.select()
+        settings.screen_region = region
+        config_store.set_region(region)
+        if hasattr(self, '_region_label'):
+            self._region_label.configure(
+                text=f"Região: top={region['top']}, "
+                f"left={region['left']}, "
+                f"width={region['width']}, "
+                f"height={region['height']}"
+            )
+
     def _on_open_folder(self):
         path = settings.recording_dir
         if os.path.isdir(path):
@@ -550,6 +617,8 @@ class MainWindow:
 
     def _on_closing(self):
         self.session.stop()
+        geometry = self._root.geometry()
+        config_store.set("window_geometry", geometry)
         self._root.destroy()
 
     def run(self):

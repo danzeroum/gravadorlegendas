@@ -5,6 +5,7 @@ atualização da interface.
 """
 import time
 import threading
+import structlog
 
 from src.config import settings
 from src.capture.screen_capture import ScreenCapture
@@ -13,6 +14,20 @@ from src.ocr.engine import OCREngine
 from src.translation.marianmt import TranslatorMarianMT
 from src.storage.file_manager import FileManager
 from src.nlp.question_detector import QuestionDetector
+
+structlog.configure(
+    processors=[
+        structlog.stdlib.filter_by_level,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.PositionalArgumentsFormatter(),
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.JSONRenderer(),
+    ],
+    context_class=dict,
+    logger_factory=structlog.PrintLoggerFactory(),
+    cache_logger_on_first_use=True,
+)
+_logger = structlog.get_logger()
 
 
 class SessionManager:
@@ -152,7 +167,7 @@ class SessionManager:
                             self.on_question(text)
 
             except Exception as e:
-                print(f"[capture_loop] Erro: {e}")
+                _logger.error("capture_loop_error", error=str(e))
 
             time.sleep(1)
 

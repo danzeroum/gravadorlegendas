@@ -1,10 +1,12 @@
-"""Configuração centralizada via variáveis de ambiente.
+"""Configuração centralizada via variáveis de ambiente e config.json.
 
 Carrega valores do arquivo .env (se existir) e disponibiliza
-como atributos tipados da classe Settings.
+como atributos tipados da classe Settings. Valores do arquivo
+config.json (gerado pela ConfigStore) sobrescrevem os do .env.
 """
 import os
 from dotenv import load_dotenv
+from src.config_store import config_store
 
 load_dotenv()
 
@@ -68,3 +70,8 @@ class Settings:
 
 
 settings = Settings()
+
+# Sobrescreve região de captura com valor persistido (se existir)
+stored_region = config_store.get("screen_region")
+if stored_region:
+    settings.screen_region = stored_region
