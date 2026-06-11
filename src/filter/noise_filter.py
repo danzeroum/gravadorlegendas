@@ -1,21 +1,40 @@
+"""Filtro de ruído para textos extraídos por OCR.
+
+Remove linhas com baixa probabilidade de serem texto válido
+usando wordlist, heurísticas e deduplicação contextual.
+"""
 import unicodedata
 
 from src.config import settings
 
 
 class NoiseFilter:
+    """Filtra ruído de OCR usando wordlist e heurísticas linguísticas.
+
+    Valida linhas contra uma wordlist, verifica presença de
+    verbos flexionados e remove duplicatas próximas.
+    """
+
     def __init__(self, wordlist_path: str | None = None):
+        """Inicializa o filtro com o caminho da wordlist.
+
+        Args:
+            wordlist_path: Caminho para o arquivo de wordlist.
+                Se None, usa o valor das settings.
+        """
         self._wordlist_path = wordlist_path or settings.wordlist_path
         self._wordlist: set[str] | None = None
         self._verb_inflections: set[str] | None = None
 
     def _remove_accents(self, text: str) -> str:
+        """Remove acentos de um texto."""
         return "".join(
             c for c in unicodedata.normalize("NFD", text)
             if unicodedata.category(c) != "Mn"
         )
 
     def _load_wordlist(self) -> set[str]:
+        """Carrega a wordlist do arquivo (com cache)."""
         if self._wordlist is not None:
             return self._wordlist
         try:
@@ -30,6 +49,7 @@ class NoiseFilter:
         return self._wordlist
 
     def _load_verb_inflections(self, path: str | None = None) -> set[str]:
+        """Carrega lista de flexões verbais do arquivo (com cache)."""
         if self._verb_inflections is not None:
             return self._verb_inflections
         self._verb_inflections = set()
@@ -52,6 +72,21 @@ class NoiseFilter:
         verb_inflections_path: str | None = None,
         min_length: int = 5,
     ) -> bool:
+        """Verifica se uma linha parece ser texto natural válido.
+
+        Critérios:
+        - Tamanho mínimo (5 caracteres)
+        - Pelo menos N palavras reconhecidas na wordlist
+        - Ou contém verbo flexionado conhecido
+
+        Args:
+            line: Linha de texto a validar.
+            verb_inflections_path: Caminho opcional para lista de verbos.
+            min_length: Comprimento mínimo da linha.
+
+        Returns:
+            True se a linha parece ser texto válido.
+        """
         line = line.strip()
         if len(line) < min_length:
             return False
@@ -84,6 +119,19 @@ class NoiseFilter:
         output_path: str,
         verb_inflections_path: str | None = None,
     ) -> int:
+        """Limpa um arquivo inteiro, removendo linhas inválidas e duplicatas.
+
+        Remove duplicatas exatas e linhas com 3+ primeiras palavras
+        iguais ou 5+ palavras em comum com a linha anterior.
+
+        Args:
+            input_path: Caminho do arquivo de entrada.
+            output_path: Caminho do arquivo de saída.
+            verb_inflections_path: Caminho opcional para lista de verbos.
+
+        Returns:
+            Número de linhas válidas salvas.
+        """
         with open(input_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 

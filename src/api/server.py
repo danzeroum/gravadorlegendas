@@ -1,3 +1,9 @@
+"""Servidor HTTP FastAPI para acesso remoto aos modelos.
+
+Fornece endpoints para tradução, resumo e geração de respostas,
+permitindo que os modelos pesados rodem em um container Docker
+enquanto a UI leve roda no desktop.
+"""
 import time
 import logging
 
@@ -22,6 +28,7 @@ _api_generator: APIGenerator | None = None
 
 
 def _get_translator() -> TranslatorMarianMT:
+    """Retorna (ou cria) o tradutor local."""
     global _translator_local
     if _translator_local is None:
         _translator_local = TranslatorMarianMT()
@@ -29,6 +36,7 @@ def _get_translator() -> TranslatorMarianMT:
 
 
 def _get_translator_api() -> TranslatorAPI:
+    """Retorna (ou cria) o tradutor via API."""
     global _translator_api
     if _translator_api is None:
         _translator_api = TranslatorAPI()
@@ -36,6 +44,7 @@ def _get_translator_api() -> TranslatorAPI:
 
 
 def _get_summarizer() -> Summarizer:
+    """Retorna (ou cria) o resumidor."""
     global _summarizer
     if _summarizer is None:
         _summarizer = Summarizer()
@@ -43,6 +52,7 @@ def _get_summarizer() -> Summarizer:
 
 
 def _get_local_generator() -> LocalGenerator:
+    """Retorna (ou cria) o gerador local de respostas."""
     global _local_generator
     if _local_generator is None:
         _local_generator = LocalGenerator()
@@ -50,14 +60,15 @@ def _get_local_generator() -> LocalGenerator:
 
 
 def _get_api_generator() -> APIGenerator:
+    """Retorna (ou cria) o gerador via API de respostas."""
     global _api_generator
     if _api_generator is None:
         _api_generator = APIGenerator()
     return _api_generator
 
 
-# --- Schemas ---
 class TranslateRequest(BaseModel):
+    """Schema para requisição de tradução."""
     text: str
     src: str = "eng"
     tgt: str = "por"
@@ -65,11 +76,13 @@ class TranslateRequest(BaseModel):
 
 
 class TranslateResponse(BaseModel):
+    """Schema para resposta de tradução."""
     translated: str
     source: str = "local"
 
 
 class SummarizeRequest(BaseModel):
+    """Schema para requisição de resumo."""
     text: str
     model: str = "gpt-3.5-turbo"
     system_prompt: str | None = None
@@ -77,19 +90,25 @@ class SummarizeRequest(BaseModel):
 
 
 class GenerateRequest(BaseModel):
+    """Schema para requisição de geração de resposta."""
     question: str
     context: str
     use_api: bool = False
 
 
-# --- Endpoints ---
 @app.get("/health")
 def health():
+    """Health check do serviço."""
     return {"status": "ok", "timestamp": time.time()}
 
 
 @app.post("/translate", response_model=TranslateResponse)
 def translate(req: TranslateRequest):
+    """Traduz texto entre idiomas.
+
+    Usa o modelo local MarianMT por padrão, ou API
+    se use_api=True.
+    """
     start = time.time()
     if req.use_api:
         result = _get_translator_api().translate(req.text, req.src, req.tgt)
@@ -108,6 +127,7 @@ def translate(req: TranslateRequest):
 
 @app.post("/summarize")
 def summarize(req: SummarizeRequest):
+    """Gera resumo do texto fornecido via LLM."""
     start = time.time()
     result = _get_summarizer().summarize(
         req.text, req.model, req.system_prompt, req.user_prompt
@@ -123,6 +143,10 @@ def summarize(req: SummarizeRequest):
 
 @app.post("/generate")
 def generate(req: GenerateRequest):
+    """Gera resposta Globish para uma pergunta no contexto.
+
+    Tenta LLM local primeiro; se falhar, faz fallback para API.
+    """
     start = time.time()
     if req.use_api:
         result = _get_api_generator().generate(req.question, req.context)

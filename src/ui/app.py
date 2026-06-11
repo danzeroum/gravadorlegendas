@@ -1,3 +1,9 @@
+"""Interface gráfica principal com abas (Tkinter).
+
+Gerencia a interação do usuário com o SessionManager,
+exibindo legendas, traduções, resumos e respostas em
+tempo real através de 4 abas organizadas.
+"""
 import threading
 from tkinter import (
     Tk, Label, Button, Entry, Text, Checkbutton, BooleanVar,
@@ -12,6 +18,15 @@ from src.nlp.summarizer import Summarizer
 
 
 class MainWindow:
+    """Janela principal do assistente de reunião.
+
+    Organizada em 4 abas (Notebook):
+    - Captura: controle de gravação.
+    - Tradução: exibição ao vivo.
+    - Resumo: geração de resumo.
+    - Respostas: detecção e resposta a perguntas.
+    """
+
     def __init__(self):
         self.session = SessionManager()
         self._translator_api = TranslatorAPI()
@@ -31,6 +46,7 @@ class MainWindow:
         self._root.protocol("WM_DELETE_WINDOW", self._on_closing)
 
     def _build_ui(self):
+        """Constrói os componentes da interface."""
         notebook = ttk.Notebook(self._root)
         notebook.pack(fill="both", expand=True, padx=5, pady=5)
 
@@ -51,6 +67,7 @@ class MainWindow:
 
     # ---- Aba Captura ----
     def _build_capture_tab(self):
+        """Aba de controle de gravação."""
         frame = self._tab_capture
         Label(
             frame, text="Gravador de Legendas ao Vivo", font=("Arial", 16),
@@ -94,6 +111,7 @@ class MainWindow:
 
     # ---- Aba Tradução ----
     def _build_translation_tab(self):
+        """Aba de exibição de tradução ao vivo."""
         frame = self._tab_translation
         Label(frame, text="Tradução em Tempo Real", font=("Arial", 16)).pack(pady=10)
 
@@ -128,6 +146,7 @@ class MainWindow:
 
     # ---- Aba Resumo ----
     def _build_summary_tab(self):
+        """Aba de geração de resumo."""
         frame = self._tab_summary
         Label(frame, text="Resumo da Reunião", font=("Arial", 16)).pack(pady=10)
 
@@ -165,6 +184,7 @@ class MainWindow:
 
     # ---- Aba Respostas ----
     def _build_answers_tab(self):
+        """Aba de detecção de perguntas e geração de respostas."""
         frame = self._tab_answers
         Label(
             frame, text="Sugestão de Respostas (Globish)",
@@ -223,29 +243,36 @@ class MainWindow:
 
     # ---- Callbacks SessionManager ----
     def _on_captured(self, text: str):
+        """Callback quando um novo texto é capturado."""
         self._root.after(0, self._append_original, text)
 
     def _on_translated(self, original: str, translated: str):
+        """Callback quando uma tradução é gerada."""
         self._root.after(0, self._update_translation, original, translated)
 
     def _on_question(self, text: str):
+        """Callback quando uma pergunta é detectada."""
         self._root.after(0, self._show_question_notification, text)
 
     def _append_original(self, text: str):
+        """Adiciona texto original à UI."""
         self._original_text.insert("1.0", text + "\n")
         self._original_text.see("1.0")
 
     def _update_translation(self, original: str, translated: str):
+        """Adiciona tradução à UI."""
         self._translated_text.insert("1.0", f"{translated}\n")
         self._translated_text.see("1.0")
 
     def _show_question_notification(self, text: str):
+        """Exibe notificação de pergunta detectada."""
         self._question_indicator.config(
             text="Possível pergunta detectada! Clique em 'Responder'.", fg="orange"
         )
 
     # ---- Botões Captura ----
     def _on_start(self):
+        """Inicia gravação."""
         prefix = self._prefix_var.get().strip()
         msg = self.session.start(prefix, self._activate_captions_var.get())
         if "Erro" in msg:
@@ -256,6 +283,7 @@ class MainWindow:
             self._btn_stop.config(state=NORMAL)
 
     def _on_stop(self):
+        """Para gravação."""
         msg = self.session.stop()
         self._status_label.config(text=msg, fg="blue")
         self._btn_start.config(state=NORMAL)
@@ -263,6 +291,7 @@ class MainWindow:
 
     # ---- Botão Resumo ----
     def _on_summarize(self):
+        """Gera resumo do texto capturado."""
         full_text = self.session.get_full_text()
         if not full_text:
             messagebox.showwarning(
@@ -284,11 +313,13 @@ class MainWindow:
         self._summary_result.insert("1.0", "Gerando resumo...")
 
     def _show_summary(self, summary: str):
+        """Exibe o resumo na UI."""
         self._summary_result.delete("1.0", END)
         self._summary_result.insert("1.0", summary)
 
     # ---- Botão Respostas ----
     def _on_set_context(self):
+        """Define o contexto da reunião."""
         ctx = self._context_text.get("1.0", END).strip()
         self.session.context = ctx
         if ctx:
@@ -297,6 +328,7 @@ class MainWindow:
             self._context_status.config(text="Contexto vazio!", fg="red")
 
     def _on_answer(self):
+        """Gera resposta para a última pergunta detectada."""
         question = self.session.last_question
         if not question:
             self._question_indicator.config(
@@ -323,6 +355,7 @@ class MainWindow:
         self._answer_globish.insert("1.0", "Gerando resposta...")
 
     def _show_answer(self, answer: str, translated: str):
+        """Exibe a resposta gerada na UI."""
         self._answer_globish.delete("1.0", END)
         self._answer_globish.insert("1.0", answer)
         self._answer_pt.delete("1.0", END)
@@ -330,8 +363,10 @@ class MainWindow:
         self._question_indicator.config(text="Resposta gerada.", fg="green")
 
     def _on_closing(self):
+        """Fecha a aplicação."""
         self.session.stop()
         self._root.destroy()
 
     def run(self):
+        """Inicia o loop principal da interface."""
         self._root.mainloop()

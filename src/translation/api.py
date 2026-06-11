@@ -1,3 +1,4 @@
+"""Tradutor via API (OpenAI ou DeepSeek) como fallback."""
 from openai import OpenAI
 import requests
 
@@ -6,16 +7,32 @@ from src.translation.base import Translator
 
 
 class TranslatorAPI(Translator):
+    """Tradução via API externa com fallback automático.
+
+    Tenta OpenAI primeiro (se configurada), depois DeepSeek.
+    """
+
     def __init__(self):
         self._openai_client: OpenAI | None = None
         self._deepseek_key: str = settings.deepseek_api_key
 
     def _get_openai(self) -> OpenAI:
+        """Retorna (ou cria) o cliente OpenAI."""
         if self._openai_client is None:
             self._openai_client = OpenAI(api_key=settings.openai_api_key)
         return self._openai_client
 
     def translate(self, text: str, src: str = "eng", tgt: str = "por") -> str:
+        """Traduz texto usando API (OpenAI ou DeepSeek).
+
+        Args:
+            text: Texto a traduzir.
+            src: Código do idioma de origem.
+            tgt: Código do idioma de destino.
+
+        Returns:
+            Texto traduzido ou mensagem de erro.
+        """
         if not text.strip():
             return ""
 
@@ -26,6 +43,7 @@ class TranslatorAPI(Translator):
         return "[Erro: Nenhuma chave de API configurada]"
 
     def _translate_openai(self, text: str, src: str, tgt: str) -> str:
+        """Tradução via ChatGPT (OpenAI)."""
         try:
             client = self._get_openai()
             resp = client.chat.completions.create(
@@ -46,6 +64,7 @@ class TranslatorAPI(Translator):
             return f"[Erro API OpenAI: {e}]"
 
     def _translate_deepseek(self, text: str, src: str, tgt: str) -> str:
+        """Tradução via API DeepSeek."""
         url = "https://api.deepseek.com/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {self._deepseek_key}",

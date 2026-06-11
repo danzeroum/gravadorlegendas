@@ -1,3 +1,8 @@
+"""Orquestração principal do assistente de reunião.
+
+Gerencia o ciclo de vida da captura, processamento e
+atualização da interface.
+"""
 import time
 import threading
 
@@ -11,6 +16,23 @@ from src.nlp.question_detector import QuestionDetector
 
 
 class SessionManager:
+    """Gerencia a sessão de captura e processamento.
+
+    Encapsula o loop de captura, tradução, detecção de
+    perguntas e notificação da UI. Substitui as variáveis
+    globais dos scripts originais.
+
+    Attributes:
+        capture: Instância de ScreenCapture.
+        ocr: Instância de OCREngine.
+        translator: Instância de TranslatorMarianMT.
+        file_manager: Instância de FileManager.
+        question_detector: Instância de QuestionDetector.
+        is_running: Indica se a captura está ativa.
+        current_file: Caminho do arquivo atual de gravação.
+        last_question: Última pergunta detectada.
+    """
+
     def __init__(self):
         self.capture = ScreenCapture(settings.screen_region)
         self.ocr = OCREngine()
@@ -31,25 +53,39 @@ class SessionManager:
 
     @property
     def is_running(self) -> bool:
+        """Indica se a captura está em andamento."""
         return self._is_running
 
     @property
     def current_file(self) -> str:
+        """Caminho do arquivo sendo gravado atualmente."""
         return self._current_file
 
     @property
     def context(self) -> str:
+        """Contexto da reunião definido pelo usuário."""
         return self._context
 
     @context.setter
     def context(self, value: str):
+        """Define o contexto da reunião."""
         self._context = value
 
     @property
     def last_question(self) -> str:
+        """Última pergunta detectada pelo QuestionDetector."""
         return self._last_question
 
     def start(self, prefix: str, activate_captions: bool = True) -> str:
+        """Inicia a captura de legendas em uma thread separada.
+
+        Args:
+            prefix: Prefixo para nomear o arquivo de saída.
+            activate_captions: Se True, ativa legendas do Windows.
+
+        Returns:
+            Mensagem de status indicando resultado.
+        """
         if self._is_running:
             return "Já está gravando."
         if not prefix.strip():
@@ -67,10 +103,20 @@ class SessionManager:
         return f"Gravando em: {self._current_file}"
 
     def stop(self) -> str:
+        """Para a captura de legendas.
+
+        Returns:
+            Mensagem de confirmação.
+        """
         self._is_running = False
         return "Gravação parada."
 
     def get_full_text(self) -> str:
+        """Retorna todo o texto capturado até o momento.
+
+        Returns:
+            Conteúdo completo do arquivo atual ou string vazia.
+        """
         if not self._current_file:
             return ""
         try:
@@ -79,6 +125,7 @@ class SessionManager:
             return ""
 
     def _capture_loop(self):
+        """Loop principal de captura (executado em thread separada)."""
         lang_map = {"eng": "eng", "por": "por", "spa": "spa"}
         ocr_lang = lang_map.get(settings.ocr_language, settings.ocr_language)
 
