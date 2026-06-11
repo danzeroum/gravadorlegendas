@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+.venv/
+venv/
+virtualenv/
+pip-log.txt
+
+# Environments
+.env
+.env.*
+!.env.example  # mantém o exemplo, ignora os demais
+
+# Coverage
+.coverage
+coverage/
+
+# Data
+data/
+
+# Docker
+docker/
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

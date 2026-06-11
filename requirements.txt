@@ -1,0 +1,38 @@
+# Captura de tela
+mss>=9.0.1
+Pillow>=10.0.0
+
+# OCR
+pytesseract>=0.3.10
+
+# Tradução local
+transformers>=4.36.0
+torch>=2.1.0
+sentencepiece>=0.1.99
+
+# LLM local (opcional - remova se nao usar)
+# llama-cpp-python>=0.2.0
+
+# API clients
+openai>=1.6.0
+requests>=2.31.0
+
+# Servidor HTTP (Docker)
+fastapi>=0.108.0
+uvicorn>=0.25.0
+
+# Logging
+structlog>=24.1.0
+
+# Métricas
+prometheus-client>=0.19.0
+
+# Config
+python-dotenv>=1.0.0
+
+# Testes
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Lint
+flake8>=7.0.0

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "gravador-reuniao"
+version = "1.0.0"
+description = "Assistente de reuniao com captura de legendas, OCR, traducao e respostas Globish"
+requires-python = ">=3.10"
+dependencies = [
+    "mss>=9.0.1",
+    "Pillow>=10.0.0",
+    "pytesseract>=0.3.10",
+    "transformers>=4.36.0",
+    "torch>=2.1.0",
+    "sentencepiece>=0.1.99",
+    "openai>=1.6.0",
+    "requests>=2.31.0",
+    "structlog>=24.1.0",
+    "prometheus-client>=0.19.0",
+    "python-dotenv>=1.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E501"]
