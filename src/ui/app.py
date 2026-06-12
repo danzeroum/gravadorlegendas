@@ -8,6 +8,7 @@ Layout:
 - Rodapé: arquivo atual + abrir pasta
 """
 import os
+import time
 import threading
 import customtkinter as ctk
 
@@ -63,6 +64,8 @@ class MainWindow:
         self._translator_api = TranslatorAPI()
         self._summarizer = Summarizer()
         self._audio_manager = AudioManager()
+        self._audio_transcript_lines: list[str] = []
+        self._audio_translated_lines: list[str] = []
 
         self._root = ctk.CTk()
         self._root.title("Gravador de Legendas")
@@ -397,12 +400,34 @@ class MainWindow:
             width=80, command=self._clear_speaker_rows,
         ).grid(row=0, column=2, padx=4, pady=4, sticky="e")
 
-        self._btn_reprocess = ctk.CTkButton(
-            tab, text="🔄 Re-processar com Diarização",
-            command=self._on_reprocess_diarization,
-            width=220, state="disabled",
+        opt_row = ctk.CTkFrame(tab, fg_color="transparent")
+        opt_row.grid(row=5, column=0, columnspan=2, pady=4)
+        opt_row.grid_columnconfigure(2, weight=1)
+
+        self._diarize_var = ctk.BooleanVar(value=True)
+        self._diarize_cb = ctk.CTkCheckBox(
+            opt_row, text="🎤 Diarização em tempo real",
+            variable=self._diarize_var,
         )
-        self._btn_reprocess.grid(row=5, column=0, columnspan=2, pady=4)
+        self._diarize_cb.pack(side="left", padx=6)
+        Tooltip(self._diarize_cb,
+                "Desligar se a CPU estiver muito alta; "
+                "diarização ainda disponível no pós-processamento")
+
+        self._btn_reprocess = ctk.CTkButton(
+            opt_row, text="🔄 Re-processar com Diarização",
+            command=self._on_reprocess_diarization,
+            width=200, state="disabled",
+        )
+        self._btn_reprocess.pack(side="left", padx=6)
+
+        self._btn_export = ctk.CTkButton(
+            opt_row, text="💾 Exportar Markdown",
+            command=self._on_audio_export,
+            width=160, state="disabled",
+        )
+        self._btn_export.pack(side="left", padx=6)
+        Tooltip(self._btn_export, "Exportar transcrição como Markdown com falantes e tradução")
 
         ctk.CTkLabel(
             tab, text="Transcrição ao Vivo:",
@@ -877,15 +902,21 @@ class MainWindow:
             return
         idx = int(self._audio_device_var.get().split(":")[0])
         self._audio_status.configure(text="Iniciando captura...", text_color="gray")
-        self._audio_manager.start(device_index=idx)
+        with_diarization = self._diarize_var.get()
+        self._audio_manager.start(
+            device_index=idx, enable_diarization=with_diarization
+        )
         self._btn_audio_start.configure(state="disabled")
         self._btn_audio_stop.configure(state="normal")
         self._btn_reprocess.configure(state="disabled")
+        self._btn_export.configure(state="disabled")
         self._audio_status.configure(
             text="🎤 Capturando áudio e transcrevendo...", text_color="#2c8c5a"
         )
         self._audio_transcript.delete("1.0", "end")
         self._audio_translated.delete("1.0", "end")
+        self._audio_transcript_lines.clear()
+        self._audio_translated_lines.clear()
 
     def _on_audio_stop(self):
         self._audio_manager.stop()
@@ -894,6 +925,8 @@ class MainWindow:
         self._audio_status.configure(text="⏹️ Captura parada.", text_color="gray")
         if self._audio_manager.recorded_wav:
             self._btn_reprocess.configure(state="normal")
+        if self._audio_transcript_lines:
+            self._btn_export.configure(state="normal")
 
     def _speaker_display(self, speaker: str | None) -> str:
         """Retorna prefixo colorido para o falante."""
@@ -906,11 +939,12 @@ class MainWindow:
     def _on_audio_transcription(self, text: str, speaker: str | None = None):
         self._save_speaker_map()
         prefix = self._speaker_display(speaker)
+        line = f"{prefix}{text}"
+        self._audio_transcript_lines.append(line)
         self._root.after(
-            0, lambda: self._append_text(
-                self._audio_transcript, f"{prefix}{text}"
-            )
+            0, lambda: self._append_text(self._audio_transcript, line)
         )
+        self._session_feed_audio_line(line)
 
     def _on_audio_error(self, error: str):
         self._root.after(
@@ -918,6 +952,41 @@ class MainWindow:
             lambda: self._audio_status.configure(
                 text=f"Erro: {error}", text_color="red"
             ),
+        )
+
+    def _session_feed_audio_line(self, line: str):
+        """Alimenta a sessão com transcrição de áudio para resumos/respostas."""
+        if hasattr(self.session, 'feed_audio_caption'):
+            self.session.feed_audio_caption(line)
+
+    def _on_audio_export(self):
+        from pathlib import Path
+        lines = self._audio_transcript_lines
+        if not lines:
+            return
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        path = Path(settings.recording_dir) / f"transcricao_{timestamp}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        translated = None
+        try:
+            translated = self._audio_translated.get("1.0", "end").strip()
+        except Exception:
+            pass
+
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(f"# Transcrição — {timestamp}\n\n")
+            f.write("## Transcrição Original\n\n")
+            for line in lines:
+                f.write(f"- {line}\n")
+            if translated:
+                f.write("\n## Tradução (PT)\n\n")
+                f.write(translated + "\n")
+            f.write("\n---\n")
+            f.write("*Exportado por Gravador de Legendas*\n")
+
+        self._audio_status.configure(
+            text=f"💾 Exportado: {path.name}", text_color="green"
         )
 
     def _on_reprocess_diarization(self):

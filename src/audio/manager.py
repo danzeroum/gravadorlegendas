@@ -62,8 +62,14 @@ class AudioManager:
     def is_running(self) -> bool:
         return self._is_running
 
-    def start(self, device_index: int | None = None):
-        """Inicia captura, transcrição e diarização."""
+    def start(self, device_index: int | None = None,
+              enable_diarization: bool = True):
+        """Inicia captura, transcrição e opcionalmente diarização.
+
+        Args:
+            device_index: Índice do dispositivo WASAPI (None = auto).
+            enable_diarization: Se True, inicia diarização em tempo real.
+        """
         if self._is_running:
             return
         self._is_running = True
@@ -79,10 +85,11 @@ class AudioManager:
         )
         self._transcriber.start()
 
-        self._diarizer = DiarizationProcess(
-            self._audio_queue, self._diarization_queue
-        )
-        self._diarizer.start()
+        if enable_diarization:
+            self._diarizer = DiarizationProcess(
+                self._audio_queue, self._diarization_queue
+            )
+            self._diarizer.start()
 
         self.capture.start(self._audio_queue)
 

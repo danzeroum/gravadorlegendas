@@ -62,6 +62,8 @@ class SessionManager:
         self._last_question: str = ""
         self._thread: threading.Thread | None = None
 
+        self._audio_captions: list[str] = []
+
         self.on_captured = None
         self.on_translated = None
         self.on_question = None
@@ -85,6 +87,14 @@ class SessionManager:
     def context(self, value: str):
         """Define o contexto da reunião."""
         self._context = value
+
+    def feed_audio_caption(self, caption: str):
+        """Alimenta o session manager com transcrição de áudio com falantes.
+
+        O texto fica disponível para resumos e respostas via get_full_text().
+        """
+        if caption:
+            self._audio_captions.append(caption)
 
     @property
     def last_question(self) -> str:
@@ -127,17 +137,23 @@ class SessionManager:
         return "Gravação parada."
 
     def get_full_text(self) -> str:
-        """Retorna todo o texto capturado até o momento.
+        """Retorna todo o texto capturado (OCR + áudio) até o momento.
 
         Returns:
-            Conteúdo completo do arquivo atual ou string vazia.
+            Conteúdo completo incluindo OCR e transcrição de áudio.
         """
-        if not self._current_file:
-            return ""
-        try:
-            return self.file_manager.read_all(self._current_file)
-        except FileNotFoundError:
-            return ""
+        parts = []
+        if self._current_file:
+            try:
+                ocr_text = self.file_manager.read_all(self._current_file)
+                if ocr_text:
+                    parts.append(ocr_text)
+            except FileNotFoundError:
+                pass
+        if self._audio_captions:
+            audio_text = "\n".join(self._audio_captions)
+            parts.append(f"--- Transcrição de Áudio ---\n{audio_text}")
+        return "\n\n".join(parts)
 
     def _capture_loop(self):
         """Loop principal de captura (executado em thread separada)."""
