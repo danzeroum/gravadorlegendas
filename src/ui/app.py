@@ -307,11 +307,20 @@ class MainWindow:
         self._btn_region.pack(pady=6)
         Tooltip(self._btn_region, "Abrir overlay para arrastar e definir a área de captura")
 
+    _SPEAKER_COLORS = [
+        "#3498db", "#e74c3c", "#2ecc71", "#f39c12",
+        "#9b59b6", "#1abc9c", "#e67e22", "#34495e",
+    ]
+    _SPEAKER_COLOR_NAMES = [
+        "Azul", "Vermelho", "Verde", "Laranja",
+        "Roxo", "Turquesa", "Marrom", "Cinza",
+    ]
+
     # ========= Aba Áudio =========
     def _build_audio_tab(self):
         tab = self._tab_audio
         tab.grid_columnconfigure(1, weight=1)
-        tab.grid_rowconfigure(4, weight=1)
+        tab.grid_rowconfigure(6, weight=1)
 
         ctk.CTkLabel(
             tab, text="Captura de Áudio (WASAPI)",
@@ -362,34 +371,128 @@ class MainWindow:
         )
         self._audio_status.grid(row=3, column=0, columnspan=2, padx=20, pady=4, sticky="w")
 
+        # Speaker mapping
+        speaker_frame = ctk.CTkFrame(tab)
+        speaker_frame.grid(row=4, column=0, columnspan=2, sticky="ew", padx=20, pady=4)
+        speaker_frame.grid_columnconfigure(2, weight=1)
+
+        ctk.CTkLabel(
+            speaker_frame, text="Falantes:",
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).grid(row=0, column=0, padx=6, pady=4, sticky="w")
+
+        self._speaker_map = {}
+        self._speaker_rows: dict[str, dict] = {}
+        self._speaker_scroll = ctk.CTkScrollableFrame(
+            speaker_frame, height=80, orientation="horizontal"
+        )
+        self._speaker_scroll.grid(row=1, column=0, columnspan=3, sticky="ew", padx=6, pady=2)
+
+        ctk.CTkButton(
+            speaker_frame, text="➕",
+            width=30, command=self._add_speaker_row,
+        ).grid(row=0, column=1, padx=4, pady=4)
+        ctk.CTkButton(
+            speaker_frame, text="✕ Limpar",
+            width=80, command=self._clear_speaker_rows,
+        ).grid(row=0, column=2, padx=4, pady=4, sticky="e")
+
+        self._btn_reprocess = ctk.CTkButton(
+            tab, text="🔄 Re-processar com Diarização",
+            command=self._on_reprocess_diarization,
+            width=220, state="disabled",
+        )
+        self._btn_reprocess.grid(row=5, column=0, columnspan=2, pady=4)
+
         ctk.CTkLabel(
             tab, text="Transcrição ao Vivo:",
             font=ctk.CTkFont(size=13, weight="bold"),
-        ).grid(row=4, column=0, padx=20, pady=(8, 2), sticky="sw")
+        ).grid(row=6, column=0, padx=20, pady=(8, 2), sticky="sw")
+
+        text_frame = ctk.CTkFrame(tab, fg_color="transparent")
+        text_frame.grid(row=6, column=0, columnspan=2, sticky="nsew", padx=20, pady=(28, 8))
+        text_frame.grid_columnconfigure(0, weight=1)
+        text_frame.grid_columnconfigure(1, weight=1)
+        text_frame.grid_rowconfigure(1, weight=1)
 
         self._audio_transcript = ctk.CTkTextbox(
-            tab, wrap="word", font=ctk.CTkFont(size=12),
+            text_frame, wrap="word", font=ctk.CTkFont(size=12),
         )
-        self._audio_transcript.grid(
-            row=4, column=0, columnspan=2, sticky="nsew", padx=20, pady=(28, 8)
-        )
-
+        self._audio_transcript.grid(row=1, column=0, sticky="nsew", padx=(0, 4))
         self._audio_translated = ctk.CTkTextbox(
-            tab, wrap="word", font=ctk.CTkFont(size=12),
+            text_frame, wrap="word", font=ctk.CTkFont(size=12),
         )
-        self._audio_translated.grid(
-            row=4, column=1, columnspan=2, sticky="nsew", padx=20, pady=(28, 8)
-        )
+        self._audio_translated.grid(row=1, column=1, sticky="nsew", padx=(4, 0))
 
         ctk.CTkLabel(
-            tab, text="Tradução:",
+            text_frame, text="Tradução:",
             font=ctk.CTkFont(size=13, weight="bold"),
-        ).grid(row=4, column=1, padx=20, pady=(8, 2), sticky="sw")
+        ).grid(row=0, column=1, padx=4, pady=(0, 2), sticky="w")
 
         self._audio_manager.on_transcription = self._on_audio_transcription
         self._audio_manager.on_error = self._on_audio_error
 
+        self._load_speaker_map()
         self._refresh_audio_devices()
+
+    def _load_speaker_map(self):
+        saved = config_store.get("speaker_map", {})
+        for sid, info in saved.items():
+            self._add_speaker_row(
+                sid, info.get("name", ""),
+                info.get("color", self._SPEAKER_COLORS[0]),
+            )
+
+    def _save_speaker_map(self):
+        mapping = {}
+        for sid, widgets in self._speaker_rows.items():
+            name = widgets["name_var"].get().strip()
+            color = widgets["color_var"].get()
+            if name:
+                mapping[sid] = {"name": name, "color": color}
+        config_store.set("speaker_map", mapping)
+
+    def _add_speaker_row(self, sid: str = "", name: str = "", color: str = ""):
+        if not sid:
+            sid = f"speaker_{len(self._speaker_rows)}"
+        if sid in self._speaker_rows:
+            return
+        if not color:
+            idx = min(len(self._speaker_rows), len(self._SPEAKER_COLORS) - 1)
+            color = self._SPEAKER_COLORS[idx]
+        row_frame = ctk.CTkFrame(self._speaker_scroll)
+        row_frame.pack(side="left", padx=4, pady=2, fill="x")
+        ctk.CTkLabel(row_frame, text=sid, font=ctk.CTkFont(size=10)).pack(side="left", padx=2)
+        name_var = ctk.StringVar(value=name)
+        entry = ctk.CTkEntry(row_frame, textvariable=name_var, width=100)
+        entry.pack(side="left", padx=2)
+        color_var = ctk.StringVar(value=color)
+        color_menu = ctk.CTkOptionMenu(
+            row_frame, values=self._SPEAKER_COLORS,
+            variable=color_var, width=60,
+        )
+        color_menu.pack(side="left", padx=2)
+        ctk.CTkButton(
+            row_frame, text="✕", width=24,
+            command=lambda s=sid: self._remove_speaker_row(s),
+        ).pack(side="left", padx=2)
+        self._speaker_rows[sid] = {
+            "name_var": name_var,
+            "color_var": color_var,
+            "frame": row_frame,
+        }
+
+    def _remove_speaker_row(self, sid: str):
+        if sid in self._speaker_rows:
+            self._speaker_rows[sid]["frame"].destroy()
+            del self._speaker_rows[sid]
+            self._save_speaker_map()
+
+    def _clear_speaker_rows(self):
+        for sid in list(self._speaker_rows.keys()):
+            self._speaker_rows[sid]["frame"].destroy()
+        self._speaker_rows.clear()
+        self._save_speaker_map()
 
     def _refresh_audio_devices(self):
         devices = self._audio_manager.list_devices()
@@ -777,18 +880,37 @@ class MainWindow:
         self._audio_manager.start(device_index=idx)
         self._btn_audio_start.configure(state="disabled")
         self._btn_audio_stop.configure(state="normal")
+        self._btn_reprocess.configure(state="disabled")
         self._audio_status.configure(
             text="🎤 Capturando áudio e transcrevendo...", text_color="#2c8c5a"
         )
+        self._audio_transcript.delete("1.0", "end")
+        self._audio_translated.delete("1.0", "end")
 
     def _on_audio_stop(self):
         self._audio_manager.stop()
         self._btn_audio_start.configure(state="normal")
         self._btn_audio_stop.configure(state="disabled")
         self._audio_status.configure(text="⏹️ Captura parada.", text_color="gray")
+        if self._audio_manager.recorded_wav:
+            self._btn_reprocess.configure(state="normal")
 
-    def _on_audio_transcription(self, text: str):
-        self._root.after(0, lambda: self._append_text(self._audio_transcript, text))
+    def _speaker_display(self, speaker: str | None) -> str:
+        """Retorna prefixo colorido para o falante."""
+        if not speaker or speaker not in self._speaker_rows:
+            return ""
+        info = self._speaker_rows[speaker]
+        name = info["name_var"].get().strip() or speaker
+        return f"● {name}: "
+
+    def _on_audio_transcription(self, text: str, speaker: str | None = None):
+        self._save_speaker_map()
+        prefix = self._speaker_display(speaker)
+        self._root.after(
+            0, lambda: self._append_text(
+                self._audio_transcript, f"{prefix}{text}"
+            )
+        )
 
     def _on_audio_error(self, error: str):
         self._root.after(
@@ -797,6 +919,39 @@ class MainWindow:
                 text=f"Erro: {error}", text_color="red"
             ),
         )
+
+    def _on_reprocess_diarization(self):
+        self._audio_status.configure(
+            text="Re-processando com diarização...", text_color="gray"
+        )
+        self._btn_reprocess.configure(state="disabled")
+
+        def task():
+            segments = self._audio_manager.reprocess_with_diarization()
+            if not segments:
+                self._root.after(
+                    0, lambda: self._audio_status.configure(
+                        text="Nenhum segmento de diarização gerado.", text_color="red"
+                    )
+                )
+                self._root.after(0, lambda: self._btn_reprocess.configure(state="normal"))
+                return
+            existing_speakers = {
+                seg["speaker"] for seg in segments
+            }
+            for sid in existing_speakers:
+                if sid not in self._speaker_rows:
+                    self._root.after(0, lambda s=sid: self._add_speaker_row(s, s))
+            self._root.after(
+                0, lambda: self._audio_status.configure(
+                    text=f"✅ Diarização concluída: {len(segments)} segmentos, "
+                    f"{len(existing_speakers)} falantes.",
+                    text_color="green"
+                )
+            )
+            self._root.after(0, lambda: self._btn_reprocess.configure(state="normal"))
+
+        threading.Thread(target=task, daemon=True).start()
 
     def _on_start(self):
         prefix = self._prefix_var.get().strip() if hasattr(
