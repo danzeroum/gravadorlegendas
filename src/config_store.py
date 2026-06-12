@@ -24,8 +24,6 @@ _DEFAULTS = {
             "ollama":     {
                 "base_url": "https://api.buildtovalue.cloud",
                 "model": "mistral:latest",
-                "username": "buildtovalue",
-                "password": "BTV_secure_2026!",
             },
             "local_gguf": {
                 "model_path": "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",

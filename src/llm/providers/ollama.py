@@ -3,22 +3,28 @@ import base64
 
 import requests
 
+from src.config import settings
 from src.llm.base import BaseLLMProvider
 
 
 class OllamaProvider(BaseLLMProvider):
-    """Provedor Ollama remoto (VPS) com Basic Auth e streaming NDJSON."""
+    """Provedor Ollama remoto (VPS) com Basic Auth e streaming NDJSON.
+
+    Credenciais lidas de settings (que carrega do .env).
+    """
 
     def __init__(
         self,
-        base_url: str = "https://api.buildtovalue.cloud",
-        model: str = "mistral:latest",
-        username: str = "",
-        password: str = "",
+        base_url: str | None = None,
+        model: str | None = None,
+        username: str | None = None,
+        password: str | None = None,
     ):
-        self._base_url = base_url.rstrip("/")
-        self._model = model
-        self._auth_header = self._build_auth(username, password)
+        self._base_url = (base_url or settings.ollama_base_url).rstrip("/")
+        self._model = model or settings.ollama_model
+        usr = username or settings.ollama_username
+        pwd = password or settings.ollama_password
+        self._auth_header = self._build_auth(usr, pwd)
 
     @staticmethod
     def _build_auth(username: str, password: str) -> str | None:

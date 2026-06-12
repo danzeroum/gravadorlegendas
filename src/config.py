@@ -54,9 +54,21 @@ class Settings:
     llm_threads: int = int(os.getenv("LLM_THREADS", "4"))
     llm_ctx: int = int(os.getenv("LLM_CTX", "2048"))
 
+    ollama_base_url: str = os.getenv(
+        "OLLAMA_BASE_URL", "https://api.buildtovalue.cloud"
+    )
+    ollama_username: str = os.getenv("OLLAMA_USERNAME", "")
+    ollama_password: str = os.getenv("OLLAMA_PASSWORD", "")
+    ollama_model: str = os.getenv("OLLAMA_MODEL", "mistral:latest")
+
     log_dir: str = os.getenv("LOG_DIR", "data/logs")
     recording_dir: str = os.getenv("RECORDING_DIR", "data/recordings")
     wordlist_path: str = os.getenv("WORDLIST_PATH", "data/wordlists/pt_50k.txt")
+
+    @property
+    def has_ollama(self) -> bool:
+        """Retorna True se credenciais Ollama foram configuradas no .env."""
+        return bool(self.ollama_username and self.ollama_password)
 
     @property
     def has_openai(self) -> bool:

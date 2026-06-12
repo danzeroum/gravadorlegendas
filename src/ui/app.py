@@ -496,7 +496,7 @@ class MainWindow:
                 ("base_url", "URL Base", False),
                 ("model", "Modelo", False),
                 ("username", "Usuário", False),
-                ("password", "Senha", True),
+                ("__password_env__", "Senha", False),
             ],
             "local_gguf": [
                 ("model_path", "Caminho .gguf", False),
@@ -508,7 +508,13 @@ class MainWindow:
         for i, (key, label, _) in enumerate(fields):
             lbl = ctk.CTkLabel(self._ia_fields_frame, text=f"{label}:")
             lbl.grid(row=i, column=0, padx=6, pady=4, sticky="w")
-            if key == "model" and provider == "ollama":
+            if key == "__password_env__":
+                entry = ctk.CTkLabel(
+                    self._ia_fields_frame, text="🔒 Gerenciado via .env",
+                    font=ctk.CTkFont(size=11), text_color="gray",
+                )
+                entry.grid(row=i, column=1, padx=6, pady=4, sticky="w")
+            elif key == "model" and provider == "ollama":
                 models = [
                     "mistral:latest", "llama3", "llama3.1",
                     "codellama", "phi3", "deepseek-coder",
@@ -516,10 +522,11 @@ class MainWindow:
                 entry = ctk.CTkOptionMenu(
                     self._ia_fields_frame, values=models, width=200,
                 )
+                entry.grid(row=i, column=1, padx=6, pady=4, sticky="ew")
             else:
                 show_char = "*" if "key" in key else ""
                 entry = ctk.CTkEntry(self._ia_fields_frame, width=300, show=show_char)
-            entry.grid(row=i, column=1, padx=6, pady=4, sticky="ew")
+                entry.grid(row=i, column=1, padx=6, pady=4, sticky="ew")
             self._ia_field_widgets[key] = entry
 
     def _populate_ia_fields(self, provider: str):
