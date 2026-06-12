@@ -14,10 +14,11 @@ import customtkinter as ctk
 from src.config import settings
 from src.main import SessionManager
 from src.translation.api import TranslatorAPI
-from src.nlp.answer_generator import LocalGenerator, APIGenerator
+from src.nlp.answer_generator import ManagedGenerator
 from src.nlp.summarizer import Summarizer
 from src.config_store import config_store
 from src.ui.region_selector import RegionSelector
+from src.llm.manager import llm_manager
 
 
 class Tooltip:
@@ -77,6 +78,11 @@ class MainWindow:
         saved_prefix = config_store.get("last_prefix", "legendas")
         if hasattr(self, '_prefix_var'):
             self._prefix_var.set(saved_prefix)
+
+        if not llm_manager._initialized:
+            llm_manager.initialize()
+
+        self._update_provider_labels()
 
         self.session.on_captured = self._on_captured
         self.session.on_translated = self._on_translated
@@ -162,12 +168,14 @@ class MainWindow:
         self._tab_capture = self._tabs.add("Captura")
         self._tab_summary_view = self._tabs.add("Resumo")
         self._tab_answers = self._tabs.add("Respostas")
+        self._tab_ia = self._tabs.add("IA")
         self._tab_config = self._tabs.add("Config")
 
         self._build_translation_tab()
         self._build_capture_tab()
         self._build_summary_tab()
         self._build_answers_tab()
+        self._build_ia_tab()
         self._build_config_tab()
 
     # ---- Notification banner ----
@@ -310,13 +318,11 @@ class MainWindow:
         frame.grid(row=1, column=0, sticky="ew", padx=20, pady=4)
         frame.grid_columnconfigure(1, weight=1)
 
-        ctk.CTkLabel(frame, text="Modelo:").grid(
-            row=0, column=0, padx=6, pady=6, sticky="w"
+        self._summary_provider_label = ctk.CTkLabel(
+            frame, text="",
+            font=ctk.CTkFont(size=11), text_color="gray",
         )
-        self._summary_model = ctk.CTkOptionMenu(
-            frame, values=["gpt-3.5-turbo", "gpt-4"], width=160,
-        )
-        self._summary_model.grid(row=0, column=1, padx=6, pady=6, sticky="w")
+        self._summary_provider_label.grid(row=0, column=0, columnspan=2, padx=6, pady=2, sticky="w")
 
         ctk.CTkLabel(frame, text="Prompt Sistema:").grid(
             row=1, column=0, padx=6, pady=6, sticky="w"
@@ -327,7 +333,7 @@ class MainWindow:
         self._sys_prompt.grid(row=1, column=1, padx=6, pady=6, sticky="ew")
 
         ctk.CTkLabel(frame, text="Prompt Usuário:").grid(
-            row=2, column=0, padx=6, pady=6, sticky="w"
+            row=2, column=0, padx=6, pady=6, sticky="nw"
         )
         self._user_prompt = ctk.CTkEntry(
             frame, placeholder_text="Por favor, resuma o seguinte texto:",
@@ -380,11 +386,11 @@ class MainWindow:
         )
         self._ctx_status.pack(side="left", padx=8)
 
-        self._use_api_ans = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(
-            tab, text="Usar API DeepSeek/OpenAI",
-            variable=self._use_api_ans,
-        ).grid(row=2, column=0, padx=20, pady=4, sticky="w")
+        self._ans_provider_label = ctk.CTkLabel(
+            tab, text="",
+            font=ctk.CTkFont(size=11), text_color="gray",
+        )
+        self._ans_provider_label.grid(row=2, column=0, padx=20, pady=2, sticky="w")
 
         ctk.CTkButton(
             tab, text="💬 Responder (Gerar Globish)",
@@ -414,6 +420,156 @@ class MainWindow:
             res_frame, wrap="word", font=ctk.CTkFont(size=12),
         )
         self._ans_pt.grid(row=1, column=1, sticky="nsew", padx=4)
+
+    # ========= Aba IA =========
+    def _build_ia_tab(self):
+        tab = self._tab_ia
+        tab.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(
+            tab, text="Configuração de IA",
+            font=ctk.CTkFont(size=15, weight="bold"),
+        ).grid(row=0, column=0, columnspan=2, pady=(15, 8))
+
+        # Provedor ativo
+        ctk.CTkLabel(tab, text="Provedor ativo:").grid(
+            row=1, column=0, padx=10, pady=6, sticky="w"
+        )
+        self._ia_provider_var = ctk.StringVar(value="openai")
+        self._ia_provider_menu = ctk.CTkOptionMenu(
+            tab, values=["openai", "deepseek", "ollama", "local_gguf"],
+            variable=self._ia_provider_var,
+            command=self._on_provider_changed,
+            width=200,
+        )
+        self._ia_provider_menu.grid(row=1, column=1, padx=10, pady=6, sticky="w")
+        Tooltip(self._ia_provider_menu, "Selecionar o provedor de IA ativo")
+
+        # Campos dinâmicos do provider
+        self._ia_fields_frame = ctk.CTkFrame(tab)
+        self._ia_fields_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=10, pady=4)
+        self._ia_fields_frame.grid_columnconfigure(1, weight=1)
+
+        self._ia_field_widgets: dict[str, ctk.CTkEntry | ctk.CTkOptionMenu] = {}
+
+        # Botões
+        btn_row = ctk.CTkFrame(tab, fg_color="transparent")
+        btn_row.grid(row=3, column=0, columnspan=2, pady=10)
+
+        self._btn_test_llm = ctk.CTkButton(
+            btn_row, text="🔌 Testar Conexão",
+            command=self._on_test_llm, width=160,
+        )
+        self._btn_test_llm.pack(side="left", padx=6)
+        Tooltip(self._btn_test_llm, "Envia um prompt de teste para o provedor ativo")
+
+        self._btn_save_llm = ctk.CTkButton(
+            btn_row, text="💾 Salvar Configuração",
+            command=self._on_save_llm_config, width=180,
+        )
+        self._btn_save_llm.pack(side="left", padx=6)
+        Tooltip(self._btn_save_llm, "Persiste as configurações do provedor ativo")
+
+        self._ia_status = ctk.CTkLabel(tab, text="", text_color="gray")
+        self._ia_status.grid(row=4, column=0, columnspan=2, padx=10, pady=4)
+
+        # Carregar valores salvos
+        self._load_ia_config()
+
+    def _load_ia_config(self):
+        llm_cfg = config_store.get_llm_config()
+        active = llm_cfg.get("active_provider", "openai")
+        self._ia_provider_var.set(active)
+        self._rebuild_ia_fields()
+        self._populate_ia_fields(active)
+
+    def _rebuild_ia_fields(self):
+        for w in self._ia_field_widgets.values():
+            w.destroy()
+        self._ia_field_widgets.clear()
+
+        provider = self._ia_provider_var.get()
+        schema = {
+            "openai":     [("api_key", "API Key", True), ("model", "Modelo", False)],
+            "deepseek":   [("api_key", "API Key", True), ("model", "Modelo", False)],
+            "ollama":     [
+                ("base_url", "URL Base", False),
+                ("model", "Modelo", False),
+                ("username", "Usuário", False),
+                ("password", "Senha", True),
+            ],
+            "local_gguf": [
+                ("model_path", "Caminho .gguf", False),
+                ("n_ctx", "Contexto (tokens)", False),
+                ("n_threads", "Threads", False),
+            ],
+        }
+        fields = schema.get(provider, [])
+        for i, (key, label, _) in enumerate(fields):
+            lbl = ctk.CTkLabel(self._ia_fields_frame, text=f"{label}:")
+            lbl.grid(row=i, column=0, padx=6, pady=4, sticky="w")
+            if key == "model" and provider == "ollama":
+                models = [
+                    "mistral:latest", "llama3", "llama3.1",
+                    "codellama", "phi3", "deepseek-coder",
+                ]
+                entry = ctk.CTkOptionMenu(
+                    self._ia_fields_frame, values=models, width=200,
+                )
+            else:
+                show_char = "*" if "key" in key else ""
+                entry = ctk.CTkEntry(self._ia_fields_frame, width=300, show=show_char)
+            entry.grid(row=i, column=1, padx=6, pady=4, sticky="ew")
+            self._ia_field_widgets[key] = entry
+
+    def _populate_ia_fields(self, provider: str):
+        prov_cfg = config_store.get_llm_provider_config(provider)
+        for key, widget in self._ia_field_widgets.items():
+            value = prov_cfg.get(key, "")
+            if isinstance(widget, ctk.CTkEntry):
+                widget.delete(0, "end")
+                widget.insert(0, str(value))
+            elif isinstance(widget, ctk.CTkOptionMenu):
+                widget.set(str(value) if value else widget._values[0])
+
+    def _on_provider_changed(self, choice: str):
+        self._rebuild_ia_fields()
+        self._populate_ia_fields(choice)
+
+    def _collect_ia_fields(self) -> dict:
+        data = {}
+        for key, widget in self._ia_field_widgets.items():
+            if isinstance(widget, ctk.CTkEntry):
+                data[key] = widget.get()
+            elif isinstance(widget, ctk.CTkOptionMenu):
+                data[key] = widget.get()
+        return data
+
+    def _on_save_llm_config(self):
+        provider = self._ia_provider_var.get()
+        prov_cfg = self._collect_ia_fields()
+        config_store.set_llm_provider_config(provider, prov_cfg)
+        llm_cfg = config_store.get_llm_config()
+        llm_cfg["active_provider"] = provider
+        config_store.set_llm_config(llm_cfg)
+        if not llm_manager._initialized:
+            llm_manager.initialize()
+        llm_manager.switch_provider(provider, prov_cfg)
+        self._update_provider_labels()
+        self._ia_status.configure(text="Configuração salva com sucesso.", text_color="green")
+
+    def _on_test_llm(self):
+        self._on_save_llm_config()
+        self._ia_status.configure(text="Testando conexão...", text_color="gray")
+
+        def task():
+            result = llm_manager.generate("Say 'connection ok' and nothing else.", max_tokens=10)
+            success = "Erro" not in result and "connection ok" in result.lower()[:20]
+            color = "green" if success else "red"
+            label = "Conexão OK!" if success else f"Falha: {result[:80]}"
+            self._root.after(0, lambda: self._ia_status.configure(text=label, text_color=color))
+
+        threading.Thread(target=task, daemon=True).start()
 
     # ========= Aba Config =========
     def _build_config_tab(self):
@@ -533,7 +689,6 @@ class MainWindow:
             self._root.after(0, self._summary_bar.start)
             result = self._summarizer.summarize(
                 text=full_text,
-                model=self._summary_model.get(),
                 system_prompt=self._sys_prompt.get() or None,
                 user_prompt=self._user_prompt.get() or None,
             )
@@ -573,10 +728,7 @@ class MainWindow:
             return
 
         def task():
-            if self._use_api_ans.get() if hasattr(self, '_use_api_ans') else False:
-                gen = APIGenerator()
-            else:
-                gen = LocalGenerator()
+            gen = ManagedGenerator()
             answer = gen.generate(question, self.session.context)
             translated = self.session.translator.translate(answer)
             self._root.after(0, lambda: self._show_answer(answer, translated))
@@ -609,6 +761,25 @@ class MainWindow:
                 f"width={region['width']}, "
                 f"height={region['height']}"
             )
+
+    def _provider_display(self) -> str:
+        """Retorna string legível do provedor ativo para exibir na UI."""
+        name = llm_manager.active_provider or "nenhum"
+        info = llm_manager.list_providers()
+        for p in info:
+            if p["name"] == name:
+                model = p.get("model", "")
+                if model:
+                    return f"🤖 {name} · {model}"
+                return f"🤖 {name}"
+        return f"🤖 {name}"
+
+    def _update_provider_labels(self):
+        text = self._provider_display()
+        if hasattr(self, '_summary_provider_label'):
+            self._summary_provider_label.configure(text=text)
+        if hasattr(self, '_ans_provider_label'):
+            self._ans_provider_label.configure(text=text)
 
     def _on_open_folder(self):
         path = settings.recording_dir

@@ -16,6 +16,23 @@ _DEFAULTS = {
     "use_api_translate": False,
     "use_api_answer": False,
     "window_geometry": "960x680",
+    "llm": {
+        "active_provider": "ollama",
+        "providers": {
+            "openai":     {"api_key": "", "model": "gpt-3.5-turbo"},
+            "deepseek":   {"api_key": "", "model": "deepseek-chat"},
+            "ollama":     {
+                "base_url": "https://api.buildtovalue.cloud",
+                "model": "mistral:latest",
+                "username": "buildtovalue",
+                "password": "BTV_secure_2026!",
+            },
+            "local_gguf": {
+                "model_path": "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+                "n_ctx": 2048, "n_threads": 4
+            },
+        },
+    },
 }
 
 
@@ -69,12 +86,27 @@ class ConfigStore:
         self._save()
 
     def set_region(self, region: dict):
-        """Atualiza a região de captura e persiste.
-
-        Args:
-            region: Dict com top, left, width, height.
-        """
+        """Atualiza a região de captura e persiste."""
         self.set("screen_region", region)
+
+    def get_llm_config(self) -> dict:
+        """Retorna a configuração completa de LLM."""
+        return self.get("llm", _DEFAULTS["llm"])
+
+    def set_llm_config(self, llm_cfg: dict):
+        """Persiste a configuração de LLM."""
+        self.set("llm", llm_cfg)
+
+    def get_llm_provider_config(self, name: str) -> dict:
+        """Retorna a configuração de um provedor específico."""
+        llm_cfg = self.get_llm_config()
+        return llm_cfg.get("providers", {}).get(name, {})
+
+    def set_llm_provider_config(self, name: str, provider_cfg: dict):
+        """Atualiza a configuração de um provedor específico."""
+        llm_cfg = self.get_llm_config()
+        llm_cfg.setdefault("providers", {})[name] = provider_cfg
+        self.set_llm_config(llm_cfg)
 
 
 config_store = ConfigStore()
