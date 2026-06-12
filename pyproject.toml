@@ -21,6 +21,15 @@ dependencies = [
     "python-dotenv>=1.0.0",
 ]
 
+[project.optional-dependencies]
+audio = [
+    "PyAudio>=0.2.14",
+    "faster-whisper>=1.0.0",
+    "silero-vad>=4.0.0",
+    "SoundFile>=0.12.0",
+    "numpy>=1.24.0",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

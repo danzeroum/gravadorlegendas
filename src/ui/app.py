@@ -19,6 +19,7 @@ from src.nlp.summarizer import Summarizer
 from src.config_store import config_store
 from src.ui.region_selector import RegionSelector
 from src.llm.manager import llm_manager
+from src.audio.manager import AudioManager
 
 
 class Tooltip:
@@ -61,6 +62,7 @@ class MainWindow:
         self.session = SessionManager()
         self._translator_api = TranslatorAPI()
         self._summarizer = Summarizer()
+        self._audio_manager = AudioManager()
 
         self._root = ctk.CTk()
         self._root.title("Gravador de Legendas")
@@ -166,6 +168,7 @@ class MainWindow:
 
         self._tab_translation = self._tabs.add("Tradução")
         self._tab_capture = self._tabs.add("Captura")
+        self._tab_audio = self._tabs.add("Áudio")
         self._tab_summary_view = self._tabs.add("Resumo")
         self._tab_answers = self._tabs.add("Respostas")
         self._tab_ia = self._tabs.add("IA")
@@ -173,6 +176,7 @@ class MainWindow:
 
         self._build_translation_tab()
         self._build_capture_tab()
+        self._build_audio_tab()
         self._build_summary_tab()
         self._build_answers_tab()
         self._build_ia_tab()
@@ -302,6 +306,102 @@ class MainWindow:
         )
         self._btn_region.pack(pady=6)
         Tooltip(self._btn_region, "Abrir overlay para arrastar e definir a área de captura")
+
+    # ========= Aba Áudio =========
+    def _build_audio_tab(self):
+        tab = self._tab_audio
+        tab.grid_columnconfigure(1, weight=1)
+        tab.grid_rowconfigure(4, weight=1)
+
+        ctk.CTkLabel(
+            tab, text="Captura de Áudio (WASAPI)",
+            font=ctk.CTkFont(size=15, weight="bold"),
+        ).grid(row=0, column=0, columnspan=2, pady=(15, 8))
+
+        frame = ctk.CTkFrame(tab)
+        frame.grid(row=1, column=0, columnspan=2, sticky="ew", padx=20, pady=4)
+        frame.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(frame, text="Dispositivo:").grid(
+            row=0, column=0, padx=6, pady=6, sticky="w"
+        )
+        self._audio_device_var = ctk.StringVar()
+        self._audio_device_menu = ctk.CTkOptionMenu(
+            frame, values=["Carregando..."], width=350,
+            variable=self._audio_device_var,
+        )
+        self._audio_device_menu.grid(row=0, column=1, padx=6, pady=6, sticky="ew")
+        Tooltip(self._audio_device_menu, "Selecionar dispositivo WASAPI para captura")
+
+        ctk.CTkButton(
+            frame, text="🔄 Atualizar Dispositivos",
+            command=self._refresh_audio_devices, width=180,
+        ).grid(row=0, column=2, padx=6, pady=6)
+        Tooltip(self._audio_device_menu, "Atualizar lista de dispositivos WASAPI")
+
+        btn_row = ctk.CTkFrame(tab, fg_color="transparent")
+        btn_row.grid(row=2, column=0, columnspan=2, pady=10)
+
+        self._btn_audio_start = ctk.CTkButton(
+            btn_row, text="🎤 Iniciar Captura", command=self._on_audio_start,
+            fg_color="#2c8c5a", hover_color="#1f6e48", width=160,
+        )
+        self._btn_audio_start.pack(side="left", padx=6)
+        Tooltip(self._btn_audio_start, "Iniciar captura de áudio e transcrição")
+
+        self._btn_audio_stop = ctk.CTkButton(
+            btn_row, text="⏹️ Parar Captura", command=self._on_audio_stop,
+            fg_color="#c0392b", hover_color="#962d22",
+            width=160, state="disabled",
+        )
+        self._btn_audio_stop.pack(side="left", padx=6)
+        Tooltip(self._btn_audio_stop, "Parar captura de áudio")
+
+        self._audio_status = ctk.CTkLabel(
+            tab, text="", font=ctk.CTkFont(size=12), text_color="gray",
+        )
+        self._audio_status.grid(row=3, column=0, columnspan=2, padx=20, pady=4, sticky="w")
+
+        ctk.CTkLabel(
+            tab, text="Transcrição ao Vivo:",
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).grid(row=4, column=0, padx=20, pady=(8, 2), sticky="sw")
+
+        self._audio_transcript = ctk.CTkTextbox(
+            tab, wrap="word", font=ctk.CTkFont(size=12),
+        )
+        self._audio_transcript.grid(
+            row=4, column=0, columnspan=2, sticky="nsew", padx=20, pady=(28, 8)
+        )
+
+        self._audio_translated = ctk.CTkTextbox(
+            tab, wrap="word", font=ctk.CTkFont(size=12),
+        )
+        self._audio_translated.grid(
+            row=4, column=1, columnspan=2, sticky="nsew", padx=20, pady=(28, 8)
+        )
+
+        ctk.CTkLabel(
+            tab, text="Tradução:",
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).grid(row=4, column=1, padx=20, pady=(8, 2), sticky="sw")
+
+        self._audio_manager.on_transcription = self._on_audio_transcription
+        self._audio_manager.on_error = self._on_audio_error
+
+        self._refresh_audio_devices()
+
+    def _refresh_audio_devices(self):
+        devices = self._audio_manager.list_devices()
+        if not devices:
+            self._audio_device_menu.configure(
+                values=["Nenhum dispositivo WASAPI encontrado"]
+            )
+            self._audio_device_var.set("Nenhum dispositivo WASAPI encontrado")
+            return
+        names = [f"{d['index']}: {d['name']}" for d in devices]
+        self._audio_device_menu.configure(values=names)
+        self._audio_device_var.set(names[0])
 
     # ========= Aba Resumo =========
     def _build_summary_tab(self):
@@ -665,6 +765,39 @@ class MainWindow:
         else:
             self._status_led.configure(text="● Parado", text_color="gray")
 
+    def _on_audio_start(self):
+        devices = self._audio_manager.list_devices()
+        if not devices:
+            self._audio_status.configure(
+                text="Nenhum dispositivo WASAPI encontrado.", text_color="red"
+            )
+            return
+        idx = int(self._audio_device_var.get().split(":")[0])
+        self._audio_status.configure(text="Iniciando captura...", text_color="gray")
+        self._audio_manager.start(device_index=idx)
+        self._btn_audio_start.configure(state="disabled")
+        self._btn_audio_stop.configure(state="normal")
+        self._audio_status.configure(
+            text="🎤 Capturando áudio e transcrevendo...", text_color="#2c8c5a"
+        )
+
+    def _on_audio_stop(self):
+        self._audio_manager.stop()
+        self._btn_audio_start.configure(state="normal")
+        self._btn_audio_stop.configure(state="disabled")
+        self._audio_status.configure(text="⏹️ Captura parada.", text_color="gray")
+
+    def _on_audio_transcription(self, text: str):
+        self._root.after(0, lambda: self._append_text(self._audio_transcript, text))
+
+    def _on_audio_error(self, error: str):
+        self._root.after(
+            0,
+            lambda: self._audio_status.configure(
+                text=f"Erro: {error}", text_color="red"
+            ),
+        )
+
     def _on_start(self):
         prefix = self._prefix_var.get().strip() if hasattr(
             self, '_prefix_var'
@@ -795,6 +928,8 @@ class MainWindow:
 
     def _on_closing(self):
         self.session.stop()
+        if self._audio_manager.is_running:
+            self._audio_manager.stop()
         geometry = self._root.geometry()
         config_store.set("window_geometry", geometry)
         self._root.destroy()
