@@ -15,6 +15,7 @@ class VoiceActivityDetector:
     def __init__(self, threshold: float = 0.5):
         self.threshold = threshold
         self._model = None
+        self._silero_vad = None
 
     def load(self):
         """Carrega o modelo Silero VAD (lazy)."""
@@ -23,18 +24,18 @@ class VoiceActivityDetector:
         try:
             import silero_vad
             self._model = silero_vad.load_silero_vad()
+            self._silero_vad = silero_vad
         except ImportError:
             raise RuntimeError("silero-vad não instalado. pip install silero-vad")
 
     def is_speech(self, audio_chunk: bytes) -> bool:
         """Retorna True se o chunk de áudio contiver fala."""
         self.load()
-        import silero_vad
         audio_array = (
             np.frombuffer(audio_chunk, dtype=np.int16).astype(np.float32)
             / 32768.0
         )
-        timestamps = silero_vad.get_speech_timestamps(
+        timestamps = self._silero_vad.get_speech_timestamps(
             audio_array, self._model, threshold=self.threshold
         )
         return len(timestamps) > 0

@@ -4,6 +4,8 @@ Gerencia captura, VAD, buffer, transcrição e diarização
 em processos/threads separados.
 """
 import os
+import time
+import logging
 import threading
 import multiprocessing
 import wave
@@ -151,12 +153,13 @@ class AudioManager:
         while self._is_running:
             try:
                 self._collect_diarization_nowait()
-            except Exception:
-                pass
+            except Exception as e:
+                logging.warning("diarization_collect_error: %s", e)
+                time.sleep(0.05)
             try:
                 self._collect_transcript()
-            except Exception:
-                pass
+            except Exception as e:
+                logging.warning("transcript_collect_error: %s", e)
 
     def _collect_diarization_nowait(self):
         """Lê segmentos de diarização pendentes (non-blocking)."""

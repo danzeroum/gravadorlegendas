@@ -5,9 +5,12 @@ e gerenciamento de provedores de LLM (/v1/llm/*).
 """
 import time
 import logging
+import threading
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 from src.translation.marianmt import TranslatorMarianMT
 from src.translation.api import TranslatorAPI
@@ -19,7 +22,27 @@ from src.config_store import config_store
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Assistente de Reunião API", version="1.0.0")
+_init_lock = threading.Lock()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if not llm_manager.is_initialized:
+        llm_manager.initialize()
+    yield
+
+
+app = FastAPI(
+    title="Assistente de Reunião API",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
 _translator_local: TranslatorMarianMT | None = None
 _translator_api: TranslatorAPI | None = None
@@ -29,36 +52,40 @@ _answer_gen: ManagedGenerator | None = None
 
 def _get_translator() -> TranslatorMarianMT:
     global _translator_local
-    if _translator_local is None:
-        _translator_local = TranslatorMarianMT()
+    with _init_lock:
+        if _translator_local is None:
+            _translator_local = TranslatorMarianMT()
     return _translator_local
 
 
 def _get_translator_api() -> TranslatorAPI:
     global _translator_api
-    if _translator_api is None:
-        _translator_api = TranslatorAPI()
+    with _init_lock:
+        if _translator_api is None:
+            _translator_api = TranslatorAPI()
     return _translator_api
 
 
 def _get_summarizer() -> Summarizer:
     global _summarizer
-    if _summarizer is None:
-        _summarizer = Summarizer()
+    with _init_lock:
+        if _summarizer is None:
+            _summarizer = Summarizer()
     return _summarizer
 
 
 def _get_answer_gen() -> ManagedGenerator:
     global _answer_gen
-    if _answer_gen is None:
-        _answer_gen = ManagedGenerator()
+    with _init_lock:
+        if _answer_gen is None:
+            _answer_gen = ManagedGenerator()
     return _answer_gen
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────
 
 class TranslateRequest(BaseModel):
-    text: str
+    text: str = Field(..., max_length=10_000)
     src: str = "eng"
     tgt: str = "por"
     use_api: bool = False
@@ -70,15 +97,15 @@ class TranslateResponse(BaseModel):
 
 
 class SummarizeRequest(BaseModel):
-    text: str
+    text: str = Field(..., max_length=50_000)
     model: str = "gpt-3.5-turbo"
     system_prompt: str | None = None
     user_prompt: str | None = None
 
 
 class GenerateRequest(BaseModel):
-    question: str
-    context: str
+    question: str = Field(..., max_length=2_000)
+    context: str = Field(..., max_length=20_000)
     use_api: bool = False
 
 
@@ -140,7 +167,7 @@ def generate(req: GenerateRequest):
 @app.get("/v1/llm/providers")
 def list_providers():
     """Lista provedores de LLM disponíveis com metadados."""
-    if not llm_manager._initialized:
+    if not llm_manager.is_initialized:
         llm_manager.initialize()
     return {"providers": llm_manager.list_providers()}
 
@@ -160,7 +187,7 @@ def set_llm_config(req: LLMConfigRequest):
     if req.active_provider is not None:
         current["active_provider"] = req.active_provider
         provider_cfg = current.get("providers", {}).get(req.active_provider, {})
-        if not llm_manager._initialized:
+        if not llm_manager.is_initialized:
             llm_manager.initialize()
         llm_manager.switch_provider(req.active_provider, provider_cfg)
     config_store.set_llm_config(current)
@@ -170,7 +197,7 @@ def set_llm_config(req: LLMConfigRequest):
 @app.post("/v1/llm/test")
 def test_llm():
     """Testa conectividade com o provedor ativo."""
-    if not llm_manager._initialized:
+    if not llm_manager.is_initialized:
         llm_manager.initialize()
     result = llm_manager.generate("Say 'ok' and nothing else.", max_tokens=10)
     success = "Erro" not in result and "ok" in result.lower()

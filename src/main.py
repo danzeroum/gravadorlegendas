@@ -57,6 +57,7 @@ class SessionManager:
 
         self._is_running = False
         self._captured_texts: set[str] = set()
+        self._texts_lock = threading.Lock()
         self._current_file: str = ""
         self._context: str = ""
         self._last_question: str = ""
@@ -166,8 +167,12 @@ class SessionManager:
                 img = self.capture.preprocess(img)
                 text = self.ocr.extract_text(img, lang=ocr_lang)
 
-                if text and text not in self._captured_texts:
-                    self._captured_texts.add(text)
+                with self._texts_lock:
+                    is_new = bool(text and text not in self._captured_texts)
+                    if is_new:
+                        self._captured_texts.add(text)
+
+                if is_new:
                     self.file_manager.save_line(self._current_file, text)
 
                     if self.on_captured:

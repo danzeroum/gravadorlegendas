@@ -25,12 +25,14 @@ class TranscriberProcess(multiprocessing.Process):
         output_queue: multiprocessing.Queue,
         model_size: str = "base",
         chunk_duration: float = 1.0,
+        language: str = "pt",
     ):
         super().__init__(daemon=True)
         self._input = input_queue
         self._output = output_queue
         self._model_size = model_size
         self._chunk_size = int(16000 * 2 * chunk_duration)
+        self._language = language
         self._stop_event = multiprocessing.Event()
 
     def stop(self):
@@ -79,7 +81,7 @@ class TranscriberProcess(multiprocessing.Process):
                 )
 
                 try:
-                    segments, _ = model.transcribe(audio_array, language="pt")
+                    segments, _ = model.transcribe(audio_array, language=self._language)
                     text = " ".join(seg.text for seg in segments)
                     if text.strip():
                         self._output.put({

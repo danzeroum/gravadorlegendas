@@ -55,7 +55,7 @@ class Settings:
     llm_ctx: int = int(os.getenv("LLM_CTX", "2048"))
 
     ollama_base_url: str = os.getenv(
-        "OLLAMA_BASE_URL", "https://api.buildtovalue.cloud"
+        "OLLAMA_BASE_URL", "http://localhost:11434"
     )
     ollama_username: str = os.getenv("OLLAMA_USERNAME", "")
     ollama_password: str = os.getenv("OLLAMA_PASSWORD", "")

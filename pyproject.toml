@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68.0"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "gravador-reuniao"
@@ -17,6 +17,9 @@ dependencies = [
     "openai>=1.6.0",
     "requests>=2.31.0",
     "structlog>=24.1.0",
+    "customtkinter>=5.2.0",
+    "fastapi>=0.108.0",
+    "uvicorn>=0.25.0",
     "prometheus-client>=0.19.0",
     "python-dotenv>=1.0.0",
 ]
@@ -34,6 +37,5 @@ audio = [
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 
-[tool.flake8]
-max-line-length = 88
-extend-ignore = ["E501"]
+[tool.coverage.report]
+fail_under = 60

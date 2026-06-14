@@ -82,5 +82,10 @@ class LLMManager:
     def active_provider(self) -> str | None:
         return registry.active_name
 
+    @property
+    def is_initialized(self) -> bool:
+        """Indica se o manager foi inicializado."""
+        return self._initialized
+
 
 llm_manager = LLMManager()

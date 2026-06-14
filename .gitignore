@@ -13,7 +13,7 @@ pip-log.txt
 # Environments
 .env
 .env.*
-!.env.example  # mantém o exemplo, ignora os demais
+!.env.example
 
 # Coverage
 .coverage

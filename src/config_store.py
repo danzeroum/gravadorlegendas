@@ -22,7 +22,7 @@ _DEFAULTS = {
             "openai":     {"api_key": "", "model": "gpt-3.5-turbo"},
             "deepseek":   {"api_key": "", "model": "deepseek-chat"},
             "ollama":     {
-                "base_url": "https://api.buildtovalue.cloud",
+                "base_url": "http://localhost:11434",
                 "model": "mistral:latest",
             },
             "local_gguf": {
@@ -47,12 +47,23 @@ class ConfigStore:
         self._data = dict(_DEFAULTS)
         self._load()
 
+    @staticmethod
+    def _deep_merge(base: dict, override: dict) -> dict:
+        """Mescla override em base recursivamente, sem apagar chaves ausentes."""
+        result = dict(base)
+        for k, v in override.items():
+            if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+                result[k] = ConfigStore._deep_merge(result[k], v)
+            else:
+                result[k] = v
+        return result
+
     def _load(self):
         try:
             if _CONFIG_FILE.exists():
                 with open(_CONFIG_FILE, "r", encoding="utf-8") as f:
                     stored = json.load(f)
-                self._data.update(stored)
+                self._data = self._deep_merge(self._data, stored)
         except (json.JSONDecodeError, OSError):
             pass
 
