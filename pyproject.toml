@@ -60,10 +60,14 @@ include = ["src*"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 markers = [
-    "integration: testes de integração que exigem hardware real",
+    "integration: testes de integração que exigem hardware real ou sessão gráfica",
     "requires_pipewire: testes que exigem PipeWire rodando",
     "requires_wasapi: testes que exigem Windows + WASAPI",
-    "requires_display: testes que exigem sessão gráfica ativa",
+    "requires_display: testes que exigem sessão gráfica ativa (X11 ou Wayland)",
+    "requires_x11: testes que exigem sessão X11 ativa",
+    "requires_wayland: testes que exigem sessão Wayland ativa",
+    "requires_stt_model: testes que exigem modelo Whisper baixado em cache",
+    "requires_tesseract: testes que exigem Tesseract instalado com idioma português",
 ]
 
 [tool.flake8]
