@@ -2,7 +2,7 @@
 
 **Data de atualização:** 2026-08-20
 **Branch:** `feat/linux-fedora-support`
-**Commit HEAD (conteúdo validado):** `7592eb5`
+**Commit HEAD (conteúdo validado):** `476e910`
 **Status global:** ✅ **FEDORA_FUNCTIONALLY_VALIDATED**
 
 > **Estados objetivos usados neste documento**: `PASSED`, `FAILED`,
