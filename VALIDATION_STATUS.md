@@ -2,8 +2,8 @@
 
 **Data de atualização:** 2026-08-20
 **Branch:** `feat/linux-fedora-support`
-**Commit HEAD:** (a ser preenchido no empacotamento)
-**Status global:** ✅ **VALIDADO EM FEDORA DESKTOP REAL — resta verificação manual da GUI e empacotamento**
+**Commit HEAD (conteúdo validado):** `859d2c3`
+**Status global:** ✅ **VALIDADO EM FEDORA DESKTOP REAL — empacotado como `-verified`**
 
 ---
 
@@ -26,8 +26,9 @@ arquivo completo quanto pelo pipeline real do app.
 1. **Verificação manual da GUI** em Wayland (app abre, banner Wayland, sem crash).
 2. Regeneração do `MANIFEST.sha256` e empacotamento.
 
-Enquanto essas pendências não forem concluídas, este ZIP **NÃO** leva o sufixo
-`-verified` no nome.
+**Concluído:** a GUI foi aberta em Wayland (janela real), permaneceu ativa sem
+crash com o aviso `Captura de tela em Wayland não é suportada via mss`, e após
+o encerramento não restaram processos `pw-record` nem do app.
 
 ---
 
