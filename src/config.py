@@ -103,6 +103,21 @@ class Settings:
     screen_capture_backend: str = os.getenv("SCREEN_CAPTURE_BACKEND", "auto")
     stt_model: str = os.getenv("STT_MODEL", "base")
     stt_device: str = os.getenv("STT_DEVICE", "auto")
+    # --- Qualidade STT (validado em Fedora real com voz espeak pt-br lenta) ---
+    # Janela de transcrição por batch em segundos. Janelas < ~5s fragmentam
+    # palavras e o Whisper alucina; a frase de referência (~6.6s) transcreve
+    # com 4/4 termos com janela de 7.0s (um batch completo). Latência das
+    # legendas ~= chunk_duration; reduza para legendas mais rápidas.
+    stt_chunk_duration: float = float(os.getenv("STT_CHUNK_DURATION", "7.0"))
+    stt_language: str = os.getenv("STT_LANGUAGE", "pt")
+    stt_task: str = os.getenv("STT_TASK", "transcribe")
+    # beam=1 + temperature=0 (greedy) transcreve voz sintética/robótica com
+    # mais fidelidade; fala humana natural pode preferir beam=5.
+    stt_beam_size: int = int(os.getenv("STT_BEAM_SIZE", "1"))
+    stt_temperature: float = float(os.getenv("STT_TEMPERATURE", "0.0"))
+    # Silero VAD elimina alucinações repetitivas do Whisper em silêncio sem
+    # descartar a fala (validado). Desligar via STT_VAD_FILTER=false.
+    stt_vad_filter: bool = os.getenv("STT_VAD_FILTER", "true").lower() in ("1", "true", "yes")
     sample_rate: int = int(os.getenv("SAMPLE_RATE", "16000"))
     channels: int = int(os.getenv("CHANNELS", "1"))
 

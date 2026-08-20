@@ -93,6 +93,22 @@ def require_tesseract():
         pytest.skip("Tesseract não encontrado no PATH")
 
 
+def require_espeak():
+    """Skip se espeak-ng não está disponível (usado para gerar fixture PT).
+
+    O teste de qualidade STT reproduz a frase de referência no sink PipeWire
+    usando espeak-ng (pacote Fedora). Sem ele, o teste pula.
+    """
+    if not _have("espeak-ng"):
+        pytest.skip("espeak-ng não encontrado — instale com: sudo dnf install espeak-ng")
+
+
+def require_pw_play():
+    """Skip se pw-play não está disponível (pipewire-utils)."""
+    if not _have("pw-play"):
+        pytest.skip("pw-play não encontrado — instale pipewire-utils")
+
+
 # ---------------------------------------------------------------------------
 # Fixtures de áudio sintético
 # ---------------------------------------------------------------------------
