@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 
 from tests.integration.conftest import (
+    WHISPER_DOWNLOAD_ROOT,
     fixture_sha256,
     generate_sine_wave_pcm16,
     require_stt_model,
@@ -64,10 +65,9 @@ class TestLocalSTTReal:
         except ImportError as e:
             pytest.skip(f"faster-whisper não instalado: {e}")
 
-        # Carrega modelo do cache
-        cache_dir = Path.home() / ".cache" / "gravador" / "audio" / "whisper" / "base"
+        # Carrega modelo do cache (mesmo cache do app e do setup)
         try:
-            model = WhisperModel(str(cache_dir), device="cpu")
+            model = WhisperModel("base", device="cpu", download_root=str(WHISPER_DOWNLOAD_ROOT))
         except Exception as e:
             pytest.skip(f"Não foi possível carregar modelo: {e}")
 

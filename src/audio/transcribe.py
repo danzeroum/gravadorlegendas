@@ -6,7 +6,20 @@ principal, evitando bloqueio da UI.
 import multiprocessing
 import queue
 import time
+from pathlib import Path
+
 import numpy as np
+
+
+# Cache único de modelos Whisper. O setup (`scripts/setup_audio_models.py`)
+# baixa para o MESMO diretório, então o app não re-baixa e os testes de
+# integração verificam exatamente o mesmo local.
+WHISPER_DOWNLOAD_ROOT = Path.home() / ".cache" / "gravador" / "audio" / "whisper"
+
+
+def whisper_model_dir(model_size: str) -> Path:
+    """Diretório (layout snapshot do HF Hub) do modelo no cache do app."""
+    return WHISPER_DOWNLOAD_ROOT / f"models--Systran--faster-whisper-{model_size}"
 
 
 class TranscriberProcess(multiprocessing.Process):
@@ -41,7 +54,11 @@ class TranscriberProcess(multiprocessing.Process):
         """Loop principal de transcrição."""
         try:
             from faster_whisper import WhisperModel
-            model = WhisperModel(self._model_size, device="cpu")
+            model = WhisperModel(
+                self._model_size,
+                device="cpu",
+                download_root=str(WHISPER_DOWNLOAD_ROOT),
+            )
         except ImportError:
             self._output.put({"error": "faster-whisper não instalado"})
             return

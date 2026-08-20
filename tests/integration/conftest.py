@@ -22,6 +22,8 @@ from pathlib import Path
 
 import pytest
 
+from src.audio.transcribe import WHISPER_DOWNLOAD_ROOT, whisper_model_dir
+
 
 # ---------------------------------------------------------------------------
 # Skip helpers
@@ -71,12 +73,17 @@ def require_display():
 
 
 def require_stt_model(model_size: str = "base"):
-    """Skip se modelo Whisper não está em cache."""
-    cache_dir = Path.home() / ".cache" / "gravador" / "audio" / "whisper" / model_size
-    if not cache_dir.exists():
+    """Skip se modelo Whisper não está em cache.
+
+    O cache é o mesmo usado pelo app (`src.audio.transcribe`) e pelo
+    script `scripts/setup_audio_models.py --whisper <size>`:
+    ~/.cache/gravador/audio/whisper/models--Systran--faster-whisper-<size>/
+    """
+    if not whisper_model_dir(model_size).exists():
         pytest.skip(
-            f"Modelo Whisper '{model_size}' não encontrado em {cache_dir}. "
-            f"Baixe manualmente ou rode: python3 scripts/setup_audio_models.py"
+            f"Modelo Whisper '{model_size}' não encontrado em "
+            f"{whisper_model_dir(model_size)}. "
+            f"Baixe com: python3 scripts/setup_audio_models.py --whisper {model_size}"
         )
 
 
