@@ -3,7 +3,7 @@
 **Data de atualização:** 2026-08-20
 **Branch:** `feat/linux-fedora-support`
 **Commit HEAD (conteúdo validado):** `859d2c3`
-**Status global:** ✅ **VALIDADO EM FEDORA DESKTOP REAL — empacotado como `-verified`**
+**Status global:** ⚠️ **PENDING_STT_QUALITY_VALIDATION — infraestrutura aprovada; STT não demonstrou qualidade mínima**
 
 ---
 
@@ -17,18 +17,17 @@ Todos os testes **unitários**, **lint** e **de integração automatizados**
 (PipeWire, STT, Wayland) **passam em ambiente real**, com **encerramento limpo
 (rc=0)** e **zero processos `pw-record` órfãos**.
 
-A **transcrição local com áudio real** foi validada end-to-end: a frase de teste
-(`teste de transcrição local no Fedora`) gerada por espeak-ng pt-br foi tocada
-no sink, capturada no monitor e transcrita com texto não vazio, tanto pelo
-arquivo completo quanto pelo pipeline real do app.
+A infraestrutura Fedora/PipeWire, UI Wayland, shutdown e empacotamento estão
+**aprovados**. Porém, a **qualidade funcional da legendagem (STT) não atingiu o
+critério mínimo**: a transcrição do áudio de referência
+(`teste de transcrição local no Fedora`) **não preserva a frase de maneira
+semanticamente confiável**. Os resultados registrados (`Passa-te de transcação,
+loucau ou fedora.` e `PESK e descreve-se. no carro. e dou-ta.`) validam o fluxo
+técnico, mas não a qualidade de legendagem.
 
-**Pendências para habilitar o sufixo `-verified`:**
-1. **Verificação manual da GUI** em Wayland (app abre, banner Wayland, sem crash).
-2. Regeneração do `MANIFEST.sha256` e empacotamento.
-
-**Concluído:** a GUI foi aberta em Wayland (janela real), permaneceu ativa sem
-crash com o aviso `Captura de tela em Wayland não é suportada via mss`, e após
-o encerramento não restaram processos `pw-record` nem do app.
+**Critério de aprovação de qualidade STT:** a transcrição normalizada deve
+conter **pelo menos 2 termos** entre: `teste`, `transcrição`, `local`, `fedora`.
+**Ainda NÃO cumprido.**
 
 ---
 
@@ -104,11 +103,11 @@ o encerramento não restaram processos `pw-record` nem do app.
 | E2E-03 | Detecção PipeWire | ✅ PASSED | `test_e2e_03_pipewire_socket_exists` (socket `$XDG_RUNTIME_DIR/pipewire-0`) |
 | E2E-04 | Detecção de microfone | ✅ PASSED | `test_e2e_04_microphone_detection` (source 51 real) |
 | E2E-05 | Detecção de áudio do sistema | ✅ PASSED | `test_e2e_05_monitor_detection` (source 50 real) |
-| E2E-06 | Captura de microfone | ✅ PASSED | `test_e2e_06_microphone_capture` (chunks reais, não vazios) |
-| E2E-07 | Captura do sistema | ✅ PASSED | `test_e2e_07_system_audio_capture` com tom real tocando |
+| E2E-06 | Captura de microfone | ⚠️ PENDING_STT_QUALITY_VALIDATION | captura técnica OK (`test_e2e_06_microphone_capture` passa), mas voz do mic interno inaudível (zumbido ~800Hz) e STT não validado |
+| E2E-07 | Captura do sistema | ⚠️ PENDING_STT_QUALITY_VALIDATION | captura técnica OK (`test_e2e_07_system_audio_capture` passa), mas transcrição não preserva frase de referência |
 | E2E-08 | Start/stop repetido | ✅ PASSED | `test_e2e_08_repeated_start_stop` + repro 5 ciclos (rc=0, 0 órfãos) |
-| E2E-09 | Transcrição local | ✅ PASSED (áudio real) | frase `teste de transcrição local no Fedora` gerada por espeak-ng pt-br → tocada no sink → capturada no monitor → transcrita: **"Passa-te de transcação, loucau ou fedora."** (arquivo completo) e **"PESK e descreve-se. no carro. e dou-ta."** (pelo `TranscriberProcess` real com lotes de 1s). Texto não vazio em ambos. |
-| E2E-10 | Pipeline completo | ✅ PASSED | app: `PipewireCapture` (monitor) → `TranscriberProcess` (spawn) → texto não vazio; encerramento limpo (rc=0), 0 `pw-record` órfãos |
+| E2E-09 | Transcrição local | ⚠️ PENDING_STT_QUALITY_VALIDATION | frase `teste de transcrição local no Fedora` (espeak-ng pt-br) tocada no sink e capturada no monitor, mas transcrição **não contém 2+ termos obrigatórios** — qualidade insuficiente |
+| E2E-10 | Pipeline completo | ⚠️ PENDING_STT_QUALITY_VALIDATION | `PipewireCapture` → `TranscriberProcess` → texto não vazio (rc=0, 0 órfãos), mas **sem fidelidade semântica** |
 | E2E-11 | OCR em X11 | ⏳ N/A Wayland | 4 testes `requires_x11` skip (sessão não é X11) |
 | E2E-12 | Wayland | ✅ PASSED | app inicia, `ScreenCaptureError` clara ("Use sessão X11 ou xdg-desktop-portal"), banner Wayland |
 | E2E-13 | Seleção de dispositivo | ✅ PASSED | `test_e2e_13_device_selection` (2 dispositivos reais) |
@@ -145,45 +144,55 @@ o encerramento não restaram processos `pw-record` nem do app.
 
 | # | Regra | Status |
 |---|-------|--------|
-| 1 | Testes unitários e lint passam | ✅ Sim (152 + flake8 limpo) |
-| 2 | E2E-01 até E2E-10 passam em Fedora desktop | ✅ Sim (todos os cenários validados; transcrição com áudio real de sistema) |
+| 1 | Testes unitários e lint passam | ✅ Sim (155 + flake8 limpo) |
+| 2 | E2E-01 até E2E-10 passam em Fedora desktop | ⚠️ Parcial — infraestrutura passou; E2E-06/07/09/10 **PENDING_STT_QUALITY_VALIDATION** |
 | 3 | E2E-12 (Wayland) documentado e seguro | ✅ Sim (3 testes passaram; fallback claro) |
 | 4 | Sem processos `pw-record` órfãos | ✅ Sim (0 órfãos após todas as suítes, repro 5 ciclos e E2E de áudio de sistema) |
-| 5 | Transcrição local validada com áudio real | ✅ Sim (frase de teste → texto não vazio) |
+| 5 | Transcrição local validada com áudio real | ❌ **NÃO** — transcrição não preserva a frase de referência (menos de 2 termos obrigatórios) |
 | 6 | Limitações explícitas no README e relatório | ✅ Sim |
 
-**Conclusão parcial**: 6/6 regras atendidas com evidência em Fedora desktop real.
-Pendências menores antes do `-verified`: verificação manual da GUI em Wayland
-(E2E-02 manual) e conferência final pelo usuário.
+**Conclusão parcial**: a regra 5 (qualidade STT) **NÃO está atendida**. O pacote
+é `PENDING_STT_QUALITY_VALIDATION`. `-verified` somente após transcrição de
+áudio de sistema controlado ser semanticamente reconhecível e todos os
+critérios obrigatórios estarem PASSED.
 
 ---
 
 ## Próximos passos obrigatórios antes de declarar "verified"
 
-1. Verificação manual da GUI em Wayland: app abre, banner Wayland aparece, sem crash.
-2. Validar ausência de órfãos após o E2E manual: `pgrep -x pw-record` deve retornar 0.
-3. Atualizar este arquivo com o commit HEAD e o resultado final.
-4. Regenerar `MANIFEST.sha256` (via `git ls-files`) e empacotar.
-5. Renomear para `gravadorlegendas-fedora-multiplatform-<YYYYMMDD>-verified.zip`
-   **somente se** tudo acima passar; caso contrário, sufixo `-pending-real-e2e`.
+1. **Corrigir o pipeline STT**: forçar `language="pt"` e `task="transcribe"`;
+   validar PCM mono/s16le/16kHz; registrar duração/RMS/pico antes do Whisper;
+   revisar VAD, normalização e chunking (janela maior que 1s); comparar
+   `beam_size=5` e variações de voz/fixture.
+2. **Teste de qualidade real**: novo teste de integração que só passa se a
+   transcrição normalizada contiver **2+ termos** entre `teste`, `transcrição`,
+   `local`, `fedora` (fixture PT conhecida reproduzida no sink PipeWire).
+3. Repetir E2E-04, E2E-05, E2E-06 e E2E-07 com o pipeline corrigido.
+4. Confirmar ausência de `pw-record` órfãos do app após o encerramento.
+5. Atualizar este arquivo, `MANIFEST.sha256` (via `git ls-files`) e reempacotar.
+6. Gerar `-verified.zip` **somente se** a transcrição de áudio de sistema
+   controlado for semanticamente reconhecível e todos os critérios estiverem
+   PASSED; caso contrário, manter o sufixo `-pending-stt-quality`.
 
 ---
 
 ## Conclusão
 
-A validação em Fedora desktop real está **completa e passando**, incluindo
-captura de áudio real (mic e monitor), transcrição local com áudio real
-de sistema (frase de teste → texto não vazio), comportamento Wayland seguro
-e ausência de processos órfãos. Os bugs reais encontrados (locale pt_BR do
-pactl, NaN/Inf no monitor, deadlock de shutdown da fila, deadlock de fork no
-transcriber) foram corrigidos com testes de regressão.
+A infraestrutura de migração Fedora está **aprovada**: captura de áudio real
+(mic e monitor), PipeWire, Wayland seguro, shutdown limpo (rc=0, 0 órfãos) e
+empacotamento. Os bugs reais encontrados (locale pt_BR do pactl, NaN/Inf no
+monitor, deadlock de shutdown da fila, deadlock de fork no transcriber) foram
+corrigidos com testes de regressão.
+
+**A qualidade STT ainda NÃO atende o critério**: a transcrição da frase de
+referência não preserva termos semânticos suficientes. O pipeline técnico
+funciona, mas a legendagem não é confiável. O pacote é
+`PENDING_STT_QUALITY_VALIDATION`.
 
 A transcrição por voz humana do microfone interno desta máquina é limitada
-por hardware (zumbido de fan/coil ~800Hz domina o sinal); o caminho de
-áudio de sistema valida o pipeline de transcrição end-to-end.
-
-Falta a **verificação manual da GUI** em Wayland para habilitar o sufixo
-`-verified` no empacotamento.
+por hardware (zumbido de fan/coil ~800Hz domina o sinal); a validação de
+qualidade STT será feita por áudio de sistema controlado (fixture PT no sink
+PipeWire).
 
 Nenhum commit foi feito na `main`; todos estão na branch
 `feat/linux-fedora-support`.
