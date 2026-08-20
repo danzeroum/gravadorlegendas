@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import threading
 
-from src.platform.types import AudioCaptureConfig, AudioChunk, AudioDevice
+from src.platform.types import AudioCaptureConfig, AudioDevice
 
 _logger = logging.getLogger(__name__)
 

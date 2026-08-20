@@ -5,13 +5,12 @@ ou PipeWire rodando.
 """
 from __future__ import annotations
 
-import multiprocessing
 import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.platform.types import AudioCaptureConfig, AudioDevice
+from src.platform.types import AudioCaptureConfig
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +78,6 @@ class TestPipewireCapture:
         assert isinstance(devices, list)
 
     def test_list_devices_with_mock_pactl(self):
-        from src.audio.backends.pipewire.capture import PipewireCapture
         from src.audio.backends.pipewire import devices as devmod
 
         # Mock da saída do pactl list sources

@@ -5,8 +5,6 @@ backend concreto usar. Implementa fallback gracioso e erros claros.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from src.platform.detection import (
     OSType,
     PlatformCapabilities,

@@ -23,7 +23,7 @@ import threading
 from typing import IO
 
 from src.audio.backends.pipewire.devices import list_pipewire_devices
-from src.platform.types import AudioCaptureConfig, AudioChunk, AudioDevice
+from src.platform.types import AudioCaptureConfig, AudioDevice
 
 _logger = logging.getLogger(__name__)
 

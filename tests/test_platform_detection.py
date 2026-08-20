@@ -9,7 +9,6 @@ import pytest
 from src.platform.detection import (
     OSType,
     SessionType,
-    PlatformCapabilities,
     detect_capabilities,
     detect_os,
     detect_session_type,

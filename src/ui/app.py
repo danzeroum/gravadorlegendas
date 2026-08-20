@@ -20,7 +20,7 @@ import time
 import threading
 import customtkinter as ctk
 
-from src.config import settings, validate_settings, ConfigValidationError
+from src.config import settings, validate_settings
 from src.main import SessionManager
 from src.translation.api import TranslatorAPI
 from src.nlp.answer_generator import ManagedGenerator

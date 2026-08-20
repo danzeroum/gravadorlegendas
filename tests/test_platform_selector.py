@@ -1,9 +1,6 @@
 """Testes para seleção automática de backends."""
 from __future__ import annotations
 
-import sys
-from unittest.mock import patch
-
 import pytest
 
 from src.platform.detection import (
