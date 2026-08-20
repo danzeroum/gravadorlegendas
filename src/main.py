@@ -22,19 +22,28 @@ from src.storage.file_manager import FileManager
 from src.nlp.question_detector import QuestionDetector
 from src.platform.detection import detect_capabilities
 
-structlog.configure(
-    processors=[
-        structlog.stdlib.filter_by_level,
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.PositionalArgumentsFormatter(),
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.JSONRenderer(),
-    ],
-    context_class=dict,
-    logger_factory=structlog.PrintLoggerFactory(),
-    cache_logger_on_first_use=True,
-)
-_logger = structlog.get_logger()
+_structlog_configured = False
+_logger = None
+
+
+def _configure_structlog() -> None:
+    global _structlog_configured, _logger
+    if _structlog_configured:
+        return
+    structlog.configure(
+        processors=[
+            structlog.stdlib.filter_by_level,
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.PositionalArgumentsFormatter(),
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.JSONRenderer(),
+        ],
+        context_class=dict,
+        logger_factory=structlog.PrintLoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
+    _logger = structlog.get_logger()
+    _structlog_configured = True
 
 
 class SessionManager:
@@ -52,6 +61,7 @@ class SessionManager:
     """
 
     def __init__(self):
+        _configure_structlog()
         self._caps = detect_capabilities()
         self.capture = ScreenCapture(settings.screen_region)
         self.ocr = OCREngine()
@@ -206,3 +216,15 @@ class SessionManager:
                 _logger.error("capture_loop_error", error=str(e))
 
             time.sleep(1)
+
+
+def launch_ui() -> None:
+    """Ponto de entrada da interface gráfica (``python -m src.main``)."""
+    _configure_structlog()
+    from src.ui.app import MainWindow
+
+    MainWindow().run()
+
+
+if __name__ == "__main__":
+    launch_ui()
