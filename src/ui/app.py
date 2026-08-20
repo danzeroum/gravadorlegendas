@@ -6,13 +6,21 @@ Layout:
 - CTkTabview: Tradução (3 colunas), Captura, Resumo, Respostas, Config
 - Banner de notificação para perguntas detectadas
 - Rodapé: arquivo atual + abrir pasta
+
+A UI se adapta por capacidade (``PlatformCapabilities``), não por string
+de SO: em Linux a aba Captura oculta a checkbox "Ativar legendas do
+Windows", a aba Áudio mostra dispositivos PipeWire/PulseAudio, e a aba
+Config expõe as novas opções multiplataforma.
 """
 import os
+import shutil
+import subprocess
+import sys
 import time
 import threading
 import customtkinter as ctk
 
-from src.config import settings
+from src.config import settings, validate_settings, ConfigValidationError
 from src.main import SessionManager
 from src.translation.api import TranslatorAPI
 from src.nlp.answer_generator import ManagedGenerator
@@ -21,6 +29,24 @@ from src.config_store import config_store
 from src.ui.region_selector import RegionSelector
 from src.llm.manager import llm_manager
 from src.audio.manager import AudioManager
+from src.platform.detection import detect_capabilities, PlatformCapabilities
+
+
+def _open_folder_crossplatform(path: str) -> None:
+    """Abre o gerenciador de arquivos no caminho dado — multiplataforma."""
+    if not os.path.isdir(path):
+        return
+    if sys.platform.startswith("win"):
+        os.startfile(path)  # type: ignore[attr-defined]
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", path])
+    else:
+        # Linux: xdg-open é o padrão FreeDesktop
+        if shutil.which("xdg-open"):
+            subprocess.Popen(["xdg-open", path])
+        else:
+            # Fallback silencioso se não houver xdg-open
+            pass
 
 
 class Tooltip:
@@ -60,6 +86,7 @@ class MainWindow:
         ctk.set_appearance_mode("light")
         ctk.set_default_color_theme("blue")
 
+        self._caps: PlatformCapabilities = detect_capabilities()
         self.session = SessionManager()
         self._translator_api = TranslatorAPI()
         self._summarizer = Summarizer()
@@ -92,6 +119,26 @@ class MainWindow:
         self.session.on_captured = self._on_captured
         self.session.on_translated = self._on_translated
         self.session.on_question = self._on_question
+
+        # Aviso inicial de configuração inválida (não bloqueia a UI)
+        errors = validate_settings()
+        if errors:
+            self._root.after(
+                500,
+                lambda: self._show_notification(
+                    "⚠️ Configuração inválida: " + "; ".join(errors[:2])
+                ),
+            )
+
+        # Aviso de Wayland sem portal (se aplicável)
+        if self._caps.is_wayland and not self._caps.supports_screen_capture:
+            self._root.after(
+                800,
+                lambda: self._show_notification(
+                    "⚠️ Wayland detectado sem portal de captura. "
+                    "Use sessão Xorg para OCR de tela."
+                ),
+            )
 
         self._root.protocol("WM_DELETE_WINDOW", self._on_closing)
 
@@ -280,6 +327,16 @@ class MainWindow:
             font=ctk.CTkFont(size=15, weight="bold"),
         ).pack(pady=(15, 5))
 
+        # Banner de plataforma — informa Windows / Linux / X11 / Wayland.
+        caps_text = self._platform_banner_text()
+        self._platform_banner = ctk.CTkLabel(
+            tab, text=caps_text,
+            font=ctk.CTkFont(size=11),
+            text_color=self._platform_banner_color(),
+            anchor="w",
+        )
+        self._platform_banner.pack(pady=(0, 6), padx=20, fill="x")
+
         frame = ctk.CTkFrame(tab)
         frame.pack(pady=10, padx=20, fill="x")
 
@@ -287,11 +344,26 @@ class MainWindow:
         self._prefix_var = ctk.StringVar(value="legendas")
         ctk.CTkEntry(frame, textvariable=self._prefix_var, width=300).pack(pady=4)
 
-        self._activate_var = ctk.BooleanVar(value=True)
-        ctk.CTkCheckBox(
-            frame, text="Ativar legendas do Windows (Win+Ctrl+L)",
-            variable=self._activate_var,
-        ).pack(pady=6)
+        # A checkbox "Ativar legendas do Windows" só é exibida em Windows.
+        # Em Linux, mostramos um label informativo explicando que a fonte
+        # de legendas é a transcrição local.
+        if self._caps.supports_windows_live_captions:
+            self._activate_var = ctk.BooleanVar(value=True)
+            ctk.CTkCheckBox(
+                frame, text="Ativar legendas do Windows (Win+Ctrl+L)",
+                variable=self._activate_var,
+            ).pack(pady=6)
+        else:
+            self._activate_var = ctk.BooleanVar(value=False)
+            ctk.CTkLabel(
+                frame,
+                text="🎤 Fonte de legendas: transcrição local (Whisper)\n"
+                     "Legendas ao Vivo do Windows não estão disponíveis nesta plataforma.",
+                font=ctk.CTkFont(size=11),
+                text_color="gray",
+                justify="left",
+                anchor="w",
+            ).pack(pady=6, fill="x")
 
         self._region_label = ctk.CTkLabel(
             frame,
@@ -310,6 +382,32 @@ class MainWindow:
         self._btn_region.pack(pady=6)
         Tooltip(self._btn_region, "Abrir overlay para arrastar e definir a área de captura")
 
+    def _platform_banner_text(self) -> str:
+        """Texto do banner de plataforma para a aba Captura."""
+        c = self._caps
+        parts = [f"💻 {c.os.value.upper()}"]
+        if c.is_linux:
+            parts.append(f"sessão {c.session.value.upper()}")
+            if c.pipewire_available:
+                parts.append("PipeWire ✓")
+            elif c.pulseaudio_available:
+                parts.append("PulseAudio ✓")
+            else:
+                parts.append("sem servidor de áudio ✗")
+            if c.is_wayland:
+                if c.supports_portal_screen_capture:
+                    parts.append("portal detectado")
+                else:
+                    parts.append("Wayland sem portal ✗")
+        return "  ·  ".join(parts)
+
+    def _platform_banner_color(self) -> str:
+        if self._caps.is_wayland and not self._caps.supports_screen_capture:
+            return "#c0392b"  # vermelho — limitação crítica
+        if not self._caps.pipewire_available and not self._caps.pulseaudio_available:
+            return "#c0392b"
+        return "#2c8c5a"  # verde — tudo OK
+
     _SPEAKER_COLORS = [
         "#3498db", "#e74c3c", "#2ecc71", "#f39c12",
         "#9b59b6", "#1abc9c", "#e67e22", "#34495e",
@@ -325,8 +423,20 @@ class MainWindow:
         tab.grid_columnconfigure(1, weight=1)
         tab.grid_rowconfigure(6, weight=1)
 
+        # Título adaptativo: WASAPI em Windows, PipeWire/PulseAudio em Linux.
+        audio_title = "Captura de Áudio"
+        if self._caps.is_windows:
+            audio_title = "Captura de Áudio (WASAPI)"
+        elif self._caps.is_linux:
+            if self._caps.pipewire_available:
+                audio_title = "Captura de Áudio (PipeWire)"
+            elif self._caps.pulseaudio_available:
+                audio_title = "Captura de Áudio (PulseAudio)"
+            else:
+                audio_title = "Captura de Áudio (sem servidor detectado)"
+
         ctk.CTkLabel(
-            tab, text="Captura de Áudio (WASAPI)",
+            tab, text=audio_title,
             font=ctk.CTkFont(size=15, weight="bold"),
         ).grid(row=0, column=0, columnspan=2, pady=(15, 8))
 
@@ -343,13 +453,17 @@ class MainWindow:
             variable=self._audio_device_var,
         )
         self._audio_device_menu.grid(row=0, column=1, padx=6, pady=6, sticky="ew")
-        Tooltip(self._audio_device_menu, "Selecionar dispositivo WASAPI para captura")
+        Tooltip(
+            self._audio_device_menu,
+            "Selecionar dispositivo para captura — microfone ou "
+            "áudio do sistema (monitor PipeWire)"
+        )
 
         ctk.CTkButton(
             frame, text="🔄 Atualizar Dispositivos",
             command=self._refresh_audio_devices, width=180,
         ).grid(row=0, column=2, padx=6, pady=6)
-        Tooltip(self._audio_device_menu, "Atualizar lista de dispositivos WASAPI")
+        Tooltip(self._audio_device_menu, "Atualizar lista de dispositivos de áudio")
 
         btn_row = ctk.CTkFrame(tab, fg_color="transparent")
         btn_row.grid(row=2, column=0, columnspan=2, pady=10)
@@ -522,12 +636,37 @@ class MainWindow:
     def _refresh_audio_devices(self):
         devices = self._audio_manager.list_devices()
         if not devices:
-            self._audio_device_menu.configure(
-                values=["Nenhum dispositivo WASAPI encontrado"]
-            )
-            self._audio_device_var.set("Nenhum dispositivo WASAPI encontrado")
+            # Mensagem adaptativa conforme plataforma.
+            if self._caps.is_linux and not self._caps.pipewire_available and not self._caps.pulseaudio_available:
+                msg = "Nenhum servidor de áudio detectado (PipeWire/PulseAudio)"
+            elif self._caps.is_linux:
+                msg = "Nenhum dispositivo PipeWire/PulseAudio encontrado"
+            else:
+                msg = "Nenhum dispositivo WASAPI encontrado"
+            self._audio_device_menu.configure(values=[msg])
+            self._audio_device_var.set(msg)
             return
-        names = [f"{d['index']}: {d['name']}" for d in devices]
+        # Guarda mapping de exibição -> (backend_id, kind) para o start()
+        self._audio_devices_meta = []
+        names = []
+        for d in devices:
+            backend_id = d.get("_backend_id", str(d["index"]))
+            kind = d.get("kind", "input")
+            label = d["name"]
+            if kind == "monitor":
+                label = f"🔊 {label}  (áudio do sistema)"
+            elif kind == "input":
+                label = f"🎤 {label}"
+            else:
+                label = f"🎧 {label}"
+            names.append(label)
+            self._audio_devices_meta.append({
+                "label": label,
+                "backend_id": backend_id,
+                "kind": kind,
+                "name": d["name"],
+                "index": d["index"],
+            })
         self._audio_device_menu.configure(values=names)
         self._audio_device_var.set(names[0])
 
@@ -816,6 +955,44 @@ class MainWindow:
             font=ctk.CTkFont(size=15, weight="bold"),
         ).grid(row=0, column=0, columnspan=2, pady=(15, 8))
 
+        # --- Bloco Multiplataforma (novo) ---
+        ctk.CTkLabel(
+            tab, text="Plataforma e Backends",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#1a6fb5",
+        ).grid(row=1, column=0, columnspan=2, pady=(8, 2), sticky="w")
+
+        platform_fields = [
+            ("Sistema operacional", settings.os_type),
+            ("Sessão gráfica", settings.session_type),
+            ("Platform backend", settings.platform_backend),
+            ("Audio backend", settings.audio_backend),
+            ("Audio source", settings.audio_source),
+            ("Caption source", settings.caption_source),
+            ("Screen capture backend", settings.screen_capture_backend),
+            ("STT model", settings.stt_model),
+            ("STT device", settings.stt_device),
+            ("Sample rate", f"{settings.sample_rate} Hz"),
+            ("Channels", str(settings.channels)),
+        ]
+        for i, (label, value) in enumerate(platform_fields):
+            ctk.CTkLabel(tab, text=label + ":").grid(
+                row=i + 2, column=0, padx=10, pady=2, sticky="w"
+            )
+            ctk.CTkLabel(
+                tab, text=str(value),
+                font=ctk.CTkFont(size=11, family="Consolas"),
+                text_color="gray",
+            ).grid(row=i + 2, column=1, padx=10, pady=2, sticky="w")
+
+        # --- Bloco tradicional (compatibilidade) ---
+        sep1_row = len(platform_fields) + 3
+        ctk.CTkLabel(
+            tab, text="Captura e OCR",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#1a6fb5",
+        ).grid(row=sep1_row, column=0, columnspan=2, pady=(8, 2), sticky="w")
+
         fields = [
             ("Região Top", str(settings.screen_region["top"])),
             ("Região Left", str(settings.screen_region["left"])),
@@ -829,17 +1006,23 @@ class MainWindow:
 
         for i, (label, value) in enumerate(fields):
             ctk.CTkLabel(tab, text=label + ":").grid(
-                row=i + 1, column=0, padx=10, pady=4, sticky="w"
+                row=sep1_row + i + 1, column=0, padx=10, pady=4, sticky="w"
             )
             ctk.CTkLabel(
                 tab, text=value, font=ctk.CTkFont(size=11, family="Consolas"),
                 text_color="gray",
-            ).grid(row=i + 1, column=1, padx=10, pady=4, sticky="w")
+            ).grid(row=sep1_row + i + 1, column=1, padx=10, pady=4, sticky="w")
 
         ctk.CTkLabel(
-            tab, text="As configurações são lidas do arquivo .env",
+            tab,
+            text="As configurações multiplataforma são lidas do arquivo .env\n"
+                 "(PLATFORM_BACKEND, AUDIO_BACKEND, AUDIO_SOURCE, CAPTION_SOURCE,\n"
+                 "SCREEN_CAPTURE_BACKEND, STT_MODEL, STT_DEVICE, SAMPLE_RATE, CHANNELS).",
             font=ctk.CTkFont(size=11), text_color="gray",
-        ).grid(row=len(fields) + 2, column=0, columnspan=2, pady=20)
+            justify="left",
+        ).grid(
+            row=sep1_row + len(fields) + 2, column=0, columnspan=2, pady=20, sticky="w"
+        )
 
     # ---- Theme toggle ----
     def _toggle_theme(self):
@@ -896,16 +1079,38 @@ class MainWindow:
     def _on_audio_start(self):
         devices = self._audio_manager.list_devices()
         if not devices:
-            self._audio_status.configure(
-                text="Nenhum dispositivo WASAPI encontrado.", text_color="red"
-            )
+            if self._caps.is_linux and not self._caps.pipewire_available and not self._caps.pulseaudio_available:
+                msg = "Nenhum servidor de áudio detectado. Instale pipewire ou pulseaudio."
+            else:
+                msg = "Nenhum dispositivo de áudio encontrado."
+            self._audio_status.configure(text=msg, text_color="red")
             return
-        idx = int(self._audio_device_var.get().split(":")[0])
+        # Resolve o dispositivo selecionado para o ID estável do backend.
+        selected_label = self._audio_device_var.get()
+        backend_id = None
+        if hasattr(self, "_audio_devices_meta"):
+            for meta in self._audio_devices_meta:
+                if meta["label"] == selected_label:
+                    backend_id = meta["backend_id"]
+                    break
+        # Fallback: parse do índice (compatibilidade com fluxo legado)
+        if backend_id is None and ":" in selected_label:
+            try:
+                backend_id = int(selected_label.split(":")[0])
+            except ValueError:
+                backend_id = None
+
         self._audio_status.configure(text="Iniciando captura...", text_color="gray")
         with_diarization = self._diarize_var.get()
-        self._audio_manager.start(
-            device_index=idx, enable_diarization=with_diarization
-        )
+        try:
+            self._audio_manager.start(
+                device_index=backend_id, enable_diarization=with_diarization
+            )
+        except Exception as e:
+            self._audio_status.configure(
+                text=f"Erro ao iniciar captura: {e}", text_color="red"
+            )
+            return
         self._btn_audio_start.configure(state="disabled")
         self._btn_audio_stop.configure(state="normal")
         self._btn_reprocess.configure(state="disabled")
@@ -1147,8 +1352,7 @@ class MainWindow:
 
     def _on_open_folder(self):
         path = settings.recording_dir
-        if os.path.isdir(path):
-            os.startfile(path)
+        _open_folder_crossplatform(path)
 
     def _on_closing(self):
         self.session.stop()

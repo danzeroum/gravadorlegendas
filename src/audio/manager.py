@@ -62,12 +62,14 @@ class AudioManager:
     def is_running(self) -> bool:
         return self._is_running
 
-    def start(self, device_index: int | None = None,
+    def start(self, device_index: int | str | None = None,
               enable_diarization: bool = True):
         """Inicia captura, transcrição e opcionalmente diarização.
 
         Args:
-            device_index: Índice do dispositivo WASAPI (None = auto).
+            device_index: Identificador do dispositivo. Em Windows, é o
+                índice WASAPI (int). Em Linux, é o ID numérico ou nome
+                do source PipeWire (str). None = auto-detect.
             enable_diarization: Se True, inicia diarização em tempo real.
         """
         if self._is_running:

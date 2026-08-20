@@ -1,121 +1,121 @@
-"""Captura de áudio via WASAPI loopback (Windows).
+"""Captura de áudio — fachada retrocompatível.
 
-Usa PyAudio para capturar o áudio do sistema (saída das
-aplicações). Requer Windows 10+ (1803+) e PyAudio.
+Historicamente este módulo implementava diretamente WASAPI loopback
+(PyAudio) e era Windows-only. A partir da migração Linux/Fedora, ele
+passa a ser uma fachada fina que delega para o backend apropriado
+(``WasapiLoopbackCapture`` em Windows, ``PipewireCapture`` em Linux),
+selecionado automaticamente por ``src.audio.backends.factory``.
+
+A API pública (métodos ``list_devices``, ``start``, ``stop`` e o
+atributo ``device_index``) é preservada para que ``AudioManager`` e os
+testes existentes continuem funcionando sem mudanças.
 """
-import threading
-import multiprocessing
+from __future__ import annotations
+
+import logging
+
+from src.audio.backends import build_audio_backend, AudioBackendError
+from src.platform.types import AudioCaptureConfig
+
+_logger = logging.getLogger(__name__)
 
 
 class AudioCapture:
-    """Captura de áudio do sistema via loopback WASAPI.
+    """Fachada retrocompatível para captura de áudio.
 
     Attributes:
+        device_index: Identificador do dispositivo (legado: índice WASAPI;
+            novo: também aceita string com ID PipeWire). Aceita int ou str.
         sample_rate: Taxa de amostragem (Hz).
-        channels: Número de canais.
-        device_index: Índice do dispositivo WASAPI.
+        channels: Número de canais (sempre 1 — mono).
         chunk_size: Tamanho do chunk em frames.
     """
 
-    def __init__(self, device_index: int | None = None,
-                 sample_rate: int = 16000, chunk_size: int = 480):
+    def __init__(
+        self,
+        device_index: int | str | None = None,
+        sample_rate: int = 16000,
+        chunk_size: int = 480,
+        backend: str = "auto",
+    ) -> None:
         self.device_index = device_index
         self.sample_rate = sample_rate
         self.channels = 1
         self.chunk_size = chunk_size
-        self._stream = None
-        self._thread: threading.Thread | None = None
-        self._is_running = False
+        self._backend_name = backend
+        self._backend = None  # construído lazy no primeiro start/list
+
+    def _build_backend(self):
+        if self._backend is not None:
+            return self._backend
+        try:
+            self._backend = build_audio_backend(
+                requested=self._backend_name,
+                device_id=self.device_index,
+                sample_rate=self.sample_rate,
+                chunk_size=self.chunk_size,
+            )
+        except AudioBackendError as e:
+            _logger.error("Falha ao construir backend de áudio: %s", e)
+            # Backend nulo — list_devices retorna [] e start registra erro.
+            self._backend = None
+        return self._backend
 
     def list_devices(self) -> list[dict]:
-        """Lista dispositivos WASAPI com suporte a loopback.
+        """Lista dispositivos disponíveis no backend ativo.
 
         Returns:
-            Lista de dicts com 'index', 'name', 'channels', 'rate'.
+            Lista de dicts com 'index', 'name', 'channels', 'rate',
+            'is_loopback' — formato preservado para compatibilidade com
+            a UI e com os testes existentes.
         """
-        devices = []
-        try:
-            import pyaudio
-            pa = pyaudio.PyAudio()
-            wasapi = pa.get_host_api_info_by_type(pyaudio.paWASAPI)
-            for i in range(pa.get_device_count()):
-                dev = pa.get_device_info_by_index(i)
-                if dev["hostApi"] == wasapi["index"]:
-                    devices.append({
-                        "index": i,
-                        "name": dev["name"],
-                        "channels": dev.get("maxInputChannels", 0),
-                        "rate": int(dev.get("defaultSampleRate", 0)),
-                        "is_loopback": "loopback" in dev["name"].lower(),
-                    })
-            pa.terminate()
-        except ImportError:
-            pass
-        return devices
+        backend = self._build_backend()
+        if backend is None:
+            return []
+        devices = backend.list_devices()
+        out: list[dict] = []
+        for i, d in enumerate(devices):
+            out.append({
+                "index": i,
+                # ID estável do backend guardado em '_backend_id' para
+                # o start() poder usar.
+                "_backend_id": d.id,
+                "name": d.name,
+                "channels": d.channels,
+                "rate": d.sample_rate,
+                "is_loopback": d.kind in ("monitor", "output"),
+                "kind": d.kind,
+                "backend": d.backend,
+            })
+        return out
 
-    def start(self, output_queue: multiprocessing.Queue):
+    def start(self, output_queue) -> None:
         """Inicia captura em thread separada.
 
         Args:
-            output_queue: Queue onde chunks de áudio são enviados.
+            output_queue: Queue onde chunks de áudio PCM s16le são enviados.
         """
-        if self._is_running:
-            return
-        self._is_running = True
-        self._queue = output_queue
-        self._thread = threading.Thread(target=self._capture_loop, daemon=True)
-        self._thread.start()
-
-    def stop(self):
-        """Para a captura."""
-        self._is_running = False
-        if self._stream:
-            try:
-                self._stream.close()
-            except Exception:
-                pass
-            self._stream = None
-
-    def _capture_loop(self):
-        """Loop de captura WASAPI em background."""
-        import pyaudio
-        pa = pyaudio.PyAudio()
-        try:
-            dev_index = self.device_index
-            if dev_index is None:
-                wasapi = pa.get_host_api_info_by_type(pyaudio.paWASAPI)
-                for i in range(pa.get_device_count()):
-                    dev = pa.get_device_info_by_index(i)
-                    if (dev["hostApi"] == wasapi["index"]
-                            and "loopback" in dev["name"].lower()
-                            and dev.get("maxInputChannels", 0) > 0):
-                        dev_index = i
-                        break
-            if dev_index is None:
-                dev_index = pa.get_default_input_device_info()["index"]
-
-            self._stream = pa.open(
-                format=pyaudio.paInt16,
-                channels=self.channels,
-                rate=self.sample_rate,
-                input=True,
-                input_device_index=dev_index,
-                frames_per_buffer=self.chunk_size,
-                stream_callback=None,
+        backend = self._build_backend()
+        if backend is None:
+            _logger.error(
+                "Nenhum backend de áudio disponível. start() ignorado."
             )
-            self._stream.start_stream()
+            return
+        config = AudioCaptureConfig(
+            device_id=str(self.device_index) if self.device_index is not None else None,
+            sample_rate=self.sample_rate,
+            channels=self.channels,
+            chunk_frames=self.chunk_size,
+        )
+        backend.start(config, output_queue)
 
-            while self._is_running:
-                try:
-                    data = self._stream.read(
-                        self.chunk_size, exception_on_overflow=False
-                    )
-                    self._queue.put(data)
-                except Exception:
-                    break
-        finally:
-            try:
-                self._stream.close()
-            except Exception:
-                pass
-            pa.terminate()
+    def stop(self) -> None:
+        """Para a captura."""
+        if self._backend is not None:
+            self._backend.stop()
+
+    @property
+    def is_running(self) -> bool:
+        if self._backend is None:
+            return False
+        return self._backend.is_running
