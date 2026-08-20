@@ -1,254 +1,129 @@
 # Status de Validação — gravadorlegendas Fedora Multiplatform
 
-**Data de geração:** 2026-08-20
+**Data de atualização:** 2026-08-20
 **Branch:** `feat/linux-fedora-support`
 **Commit HEAD:** (a ser preenchido no empacotamento)
-**Status global:** ⚠️ **PENDENTE DE VALIDAÇÃO REAL EM FEDORA DESKTOP**
+**Status global:** ⚠️ **VALIDADO POR TESTES AUTOMATIZADOS EM FEDORA REAL — resta E2E com fala humana e empacotamento**
 
 ---
 
 ## Resumo objetivo
 
-A implementação está **completa em código** e **validada por testes unitários,
-lint e inspeção estática**, mas **NÃO foi validada em Fedora desktop real**
-com PipeWire ativo, microfone físico e modelo STT local baixado.
+A implementação foi validada em **Fedora desktop real (44, kernel 7.1.8-200.fc44,
+sessão Wayland/GNOME)** com PipeWire ativo, microfone físico, monitor de sink,
+Tesseract (eng+por) e modelo STT Whisper `base` local.
 
-**Os testes E2E obrigatórios (E2E-01 até E2E-10) NÃO foram executados em
-ambiente real.** Portanto, **NÃO se pode declarar "Fedora funcionalmente
-validado"** conforme exigido pela regra de aprovação.
+Todos os testes **unitários**, **lint** e **de integração automatizados**
+(PipeWire, STT, Wayland) **passam em ambiente real**, com **encerramento limpo
+(rc=0)** e **zero processos `pw-record` órfãos**.
 
-Este ZIP **NÃO** leva o sufixo `-verified` no nome.
+**Pendências para declarar "Fedora funcionalmente validado":**
+1. E2E com **fala humana real** (gravar a frase de teste e confirmar transcrição não vazia).
+2. **Inicialização manual da interface gráfica** (app abre sem crash em Wayland).
+3. Regeneração do `MANIFEST.sha256` e empacotamento `-verified`/`-pending`.
+
+Enquanto essas pendências não forem concluídas, este ZIP **NÃO** leva o sufixo
+`-verified` no nome.
 
 ---
 
-## Ambiente de validação utilizado
-
-### Ambiente A — contêiner headless (atual)
+## Ambiente de validação utilizado (Fedora desktop real)
 
 | Item | Valor |
 |------|-------|
-| OS | Linux (Alibaba Cloud Linux, kernel 5.10) |
-| Distribuição | NÃO é Fedora — contêiner genérico |
-| Python | 3.12.13 |
-| `XDG_SESSION_TYPE` | não definido (headless) |
-| `DISPLAY` | não definido |
-| `WAYLAND_DISPLAY` | não definido |
-| PipeWire | não instalado |
-| `pactl` | não disponível |
-| `pw-record` | não disponível |
-| Tesseract | 5.x em `/usr/bin/tesseract` (sem langpack português) |
-| Modelo Whisper | não baixado |
-| Microfone | nenhum |
-| GPU | nenhuma |
+| OS | Fedora Linux 44 (Workstation Edition) — `fc44.x86_64` |
+| Kernel | `7.1.8-200.fc44.x86_64` |
+| Sessão | Wayland/GNOME — `XDG_SESSION_TYPE=wayland` |
+| `XDG_RUNTIME_DIR` | `/run/user/1000` |
+| Python | 3.12.14 (gerenciado por `mise`) |
+| PipeWire | 1.6.8 ativo (`pipewire.service`, `pipewire-pulse.service`) |
+| `pactl` | disponível — **locale do subprocesso era pt_BR** (corrigido forçando C) |
+| `pw-record` | disponível (`pipewire-utils`) |
+| `pw-play` | disponível (usado no E2E-07 com tom sintético) |
+| Tesseract | 5.5.3 + langpacks `eng` e `por` (via `pkexec dnf install`) |
+| Modelo Whisper | `tiny` e `base` em `~/.cache/gravador/audio/whisper/models--Systran--faster-whisper-*` |
+| Microfone | source 51: `alsa_input.pci-0000_00_1f.3.analog-stereo` (48000Hz s32le) |
+| Monitor (sistema) | source 50: `alsa_output.pci-0000_00_1f.3.analog-stereo.monitor` (48000Hz s32le) |
+| GPU | CPU-only (ctranslate2 converteu float16→float32 com aviso, sem erro) |
+| Interface gráfica | tkinter (Tk 9.0) disponível |
 
-**Comandos de coleta de ambiente (não executados por falta de Fedora real):**
-
-```bash
-cat /etc/fedora-release           # N/A — não é Fedora
-uname -a                          # Linux ... x86_64 GNU/Linux
-python3 --version                 # Python 3.12.13
-pw-cli info 0                     # N/A — pw-cli não instalado
-systemctl --user status pipewire  # N/A
-pactl info                        # N/A
-pactl list short sources          # N/A
-pactl list short sinks            # N/A
-echo "$XDG_SESSION_TYPE"          # (vazio)
-```
-
-### Ambiente B — Fedora desktop real (pendente)
-
-**Não disponível nesta execução.** Para validar, é necessário provisionar:
-
-- VM ou máquina física com Fedora Workstation 40+ ou Fedora KDE
-- PipeWire ativo por padrão
-- `pipewire-pulseaudio`, `pipewire-utils` instalados
-- Tesseract + `tesseract-langpack-por` + `tesseract-langpack-eng`
-- Microfone físico ou fonte virtual (`pactl load-module module-null-sink`)
-- Saída de áudio funcional (alto-falante ou fone)
-- Navegador ou player para reproduzir áudio de teste
-- Modelo Whisper `base` baixado em `~/.cache/gravador/audio/whisper/base/`
+**Evidências coletadas em `artifacts/validation/` (não versionadas):**
+`uname.txt`, `python-version.txt`, `session.txt`, `pipewire-status.txt`,
+`pipewire-pulse-status.txt`, `pactl-info.txt`, `pactl-sources.txt`,
+`pactl-sinks.txt`, `pw-cli-info.txt`, `pwtest2.log`, `stt.log`,
+`integration_all.log`.
 
 ---
 
-## Matriz de testes — status por cenário
+## Correções aplicadas durante a validação real
 
-### Testes unitários (CI headless — Ambiente A)
+| # | Bug real encontrado | Correção | Teste de regressão |
+|---|---------------------|----------|--------------------|
+| 1 | `pactl` em locale pt_BR emitia `Fonte #N`/`Estado:` → parser esperava `Source #`/`State:` → `list_pipewire_devices()` retornava `[]` | `_pactl_env()` força `LC_ALL/LC_MESSAGES/LANG/LANGUAGE=C` no subprocesso | `test_run_pactl_list_forces_c_locale` |
+| 2 | Fonte monitor idle entregava amostras NaN/Inf → `RuntimeWarning` e valores indefinidos no cast f32→s16 | `np.nan_to_num` na conversão PCM | `test_pump_stdout_sanitizes_nan_inf` |
+| 3 | start/stop sem leitura deixava o feeder do `multiprocessing.Queue` bloqueado em pipe cheio → **processo Python não encerrava** após a suíte | `stop()` drena a fila (`_drain_queue`) | `test_drain_queue_empties_pending_data` + repro 5 ciclos rc=0 |
+| 4 | `TranscriberProcess` não encerrava: pai multi-threaded + `fork()` → deadlock no filho | start method `spawn` (`set_start_method("spawn", force=True)`) | `test_transcriber_process_lifecycle` (real) |
+| 5 | `pip install -e` falhava (build-backend inválido) | `pyproject.toml`: `setuptools.build_meta` | instalação edível OK |
+| 6 | Cache do modelo Whisper em caminho divergente + `--whisper` ignorado no setup | cache unificado em `~/.cache/gravador/audio/whisper/` e flag honrada | `test_e2e_09` carrega `base` em ~0.5s |
+
+---
+
+## Matriz de testes — resultados reais (Fedora 44, Wayland)
+
+### Testes unitários + lint
 
 | Comando | Resultado | Duração |
 |---------|-----------|---------|
-| `pytest -q -m "not integration"` | ✅ 152 passed, 22 deselected | 11.17s |
-| `pytest -q` (sem filtro) | ✅ 152 passed, 22 skipped | 10.28s |
+| `pytest -q -m "not integration"` | ✅ 152 passed, 22 deselected | ~4.1s |
 | `python3 -m flake8 src/ --max-line-length=100 --extend-ignore=E501,W503,E203` | ✅ limpo (0 avisos) | <1s |
-| `pytest -q -m "integration and requires_pipewire"` | ⏸️ 11 skipped (sem PipeWire) | 0.11s |
-| `pytest -q -m "integration and requires_stt_model"` | ⏸️ 3 skipped (sem modelo) | 0.07s |
-| `pytest -q -m "integration and requires_x11"` | ⏸️ 4 skipped (sem X11) | 0.08s |
-| `pytest -q -m "integration and requires_display"` | ⏸️ 4 skipped (sem display) | 0.08s |
 
-### Testes E2E obrigatórios (Ambiente B — Fedora desktop real)
+### Testes de integração — Fedora real
 
-| ID | Cenário | Status | Evidência |
-|----|---------|--------|-----------|
-| E2E-01 | Instalação limpa Fedora | ⏳ PENDENTE | Requer Fedora real |
-| E2E-02 | Inicialização da aplicação | ⏳ PENDENTE | Requer Fedora desktop |
-| E2E-03 | Detecção PipeWire | ⏳ PENDENTE | Requer PipeWire ativo |
-| E2E-04 | Detecção de microfone | ⏳ PENDENTE | Requer microfone |
-| E2E-05 | Detecção de áudio do sistema | ⏳ PENDENTE | Requer sink ativo |
-| E2E-06 | Captura de microfone | ⏳ PENDENTE | Requer microfone + PipeWire |
-| E2E-07 | Captura do sistema | ⏳ PENDENTE | Requer player + monitor |
-| E2E-08 | Start/stop repetido | ⏳ PENDENTE | Requer PipeWire |
-| E2E-09 | Transcrição local | ⏳ PENDENTE | Requer modelo Whisper |
-| E2E-10 | Pipeline completo | ⏳ PENDENTE | Requer tudo acima |
-| E2E-11 | OCR em X11 | ⏳ PENDENTE | Requer X11 + Tesseract PT |
-| E2E-12 | Wayland | ⏳ PENDENTE | Requer Wayland |
-| E2E-13 | Seleção de dispositivo | ⏳ PENDENTE | Requer 2+ dispositivos |
-| E2E-14 | Ausência de PipeWire | ✅ Validado por teste unitário | `test_e2e_14_no_pipewire_graceful_failure` (pula em ambiente real, mas valida o caminho feliz em testes unitários) |
-| E2E-15 | Regressão Windows isolada | ✅ Validado por teste unitário | `test_e2e_15_wasapi_never_on_linux` e `test_platform_selector.py::test_wasapi_on_linux_raises` |
+| Comando | Resultado | Notas |
+|---------|-----------|-------|
+| `pytest -q -m "integration and requires_pipewire"` | ✅ 10 passed, 1 skipped | skip = E2E-07 (monitor silencioso na execução) |
+| `pytest -q -m "integration and requires_pipewire" -k test_e2e_07_system_audio_capture` | ✅ PASSED | rodado com `pw-play` tocando tom 440/880Hz no sink |
+| `pytest -q -m "integration and requires_stt_model"` | ✅ 3 passed | inclui `test_transcriber_process_lifecycle` e `test_e2e_09` |
+| `pytest -q -m "integration and requires_display" -k wayland` | ✅ 3 passed, 1 skipped | skip = cross-control X11 (legítimo em Wayland) |
+| `pytest -q -m "integration"` (consolidado) | ✅ 16 passed, 6 skipped | skips: e2e_07 sem áudio naquele run, 4×X11 OCR, 1×cross-control X11 |
+| repro start/stop 5 ciclos | ✅ rc=0, sem hang, sem `RuntimeWarning` | encerramento limpo pós-suíte |
 
-### Detalhamento do que foi validado vs. pendente
+**Contagem de `pw-record`**: baseline 0 → após cada suíte e após o repro, **0 órfãos**.
 
-#### ✅ Validado por teste unitário (com mocks)
+### Cobertura por cenário E2E
 
-- Detecção de OS/sessão/capacidades em Windows, Linux, Wayland, X11, headless.
-- Seleção automática de backend com fallback gracioso.
-- Backend WASAPI jamais selecionado em Linux.
-- Backend PipeWire não selecionado em Windows.
-- Legendas ao Vivo do Windows não chamadas em Linux (`WindowsLiveCaptionsSource` levanta `CaptionSourceError` na construção).
-- Validação de configurações inválidas (`audio_backend=wasapi` em Linux, etc.).
-- Fallback `auto` → `local_stt` em Linux.
-- Formato de chunks PCM s16le 16kHz mono compatível com pipeline.
-- Parser de `pactl list sources` (com fixture sintética).
-- Lifecycle de `PipewireCapture` (start/stop idempotente, build_cmd correto).
-- Detecção de Wayland e `ScreenCaptureError` clara.
-- `os.startfile` substituído por `_open_folder_crossplatform`.
-
-#### ⏳ Pendente de validação real em Fedora desktop
-
-- **E2E-01 a E2E-10**: fluxo completo de áudio com PipeWire real.
-- **E2E-11**: OCR em X11 com Tesseract + langpack português real.
-- **E2E-12**: comportamento em Wayland (validar que o app não crashe, exibe banner correto, etc.).
-- **E2E-13**: seleção manual entre microfone e monitor reais.
-- Ausência de processos `pw-record` órfãos após 5 ciclos.
-- Transcrição de fala real em português com texto não vazio.
+| ID | Cenário | Status | Como foi validado |
+|----|---------|--------|-------------------|
+| E2E-01 | Instalação limpa Fedora | ✅ PASSED | clone, venv 3.12, `pip install -e ".[linux,audio,dev]"`, tkinter/Tk 9.0 |
+| E2E-02 | Inicialização da aplicação | ✅ PASSED | `test_wayland_app_does_not_crash_on_init` (SessionManager/App init) |
+| E2E-03 | Detecção PipeWire | ✅ PASSED | `test_e2e_03_pipewire_socket_exists` (socket `$XDG_RUNTIME_DIR/pipewire-0`) |
+| E2E-04 | Detecção de microfone | ✅ PASSED | `test_e2e_04_microphone_detection` (source 51 real) |
+| E2E-05 | Detecção de áudio do sistema | ✅ PASSED | `test_e2e_05_monitor_detection` (source 50 real) |
+| E2E-06 | Captura de microfone | ✅ PASSED | `test_e2e_06_microphone_capture` (chunks reais, não vazios) |
+| E2E-07 | Captura do sistema | ✅ PASSED | `test_e2e_07_system_audio_capture` com tom real tocando |
+| E2E-08 | Start/stop repetido | ✅ PASSED | `test_e2e_08_repeated_start_stop` + repro 5 ciclos (rc=0, 0 órfãos) |
+| E2E-09 | Transcrição local | ✅ PARCIAL | pipeline real com modelo `base` (áudio sintético → texto `''`); **falta fala humana** |
+| E2E-10 | Pipeline completo | ⏳ PENDENTE | depende de E2E-09 com fala humana + GUI manual |
+| E2E-11 | OCR em X11 | ⏳ N/A Wayland | 4 testes `requires_x11` skip (sessão não é X11) |
+| E2E-12 | Wayland | ✅ PASSED | app inicia, `ScreenCaptureError` clara ("Use sessão X11 ou xdg-desktop-portal"), banner Wayland |
+| E2E-13 | Seleção de dispositivo | ✅ PASSED | `test_e2e_13_device_selection` (2 dispositivos reais) |
+| E2E-14 | Ausência de PipeWire | ✅ PASSED | `test_e2e_14_no_pipewire_graceful_failure` (unitário com mock) |
+| E2E-15 | Regressão Windows isolada | ✅ PASSED | `test_e2e_15_wasapi_never_on_linux` (unitário) |
 
 ---
 
 ## Limitações explícitas remanescentes
 
-### 1. Captura de tela em Wayland via portal (NÃO implementada)
-
-- **Status**: Não implementado.
-- **Comportamento**: Em Wayland sem `xdg-desktop-portal`, `ScreenCapture.capture()` lança `ScreenCaptureError` com mensagem orientando fallback para X11.
-- **Plano**: Ver seção 8.1 do `RELATORIO_MIGRACAO_FEDORA.md`.
-
-### 2. `audio_source=both` (NÃO implementado)
-
-- **Status**: A opção é validada em `validate_settings()` mas o `AudioManager` não implementa mixagem microfone+sistema.
-- **Comportamento**: Apenas `device_index` único é suportado por vez.
-- **Plano**: Implementar mixagem downmix em `AudioManager` em versão futura.
-
-### 3. Diarização não testada em Linux
-
-- **Status**: Código preservado intacto, mas sem validação.
-- **Comportamento**: Teoricamente multiplataforma (`diart` é puro Python + PyTorch).
-- **Plano**: Teste manual em Fedora com token HF configurado.
-
-### 4. PipeWire via `pw-record` (sem teste de captura real)
-
-- **Status**: Lógica de subprocess validada por teste unitário com mocks, mas sem captura de áudio real.
-- **Comportamento**: Em Fedora real com PipeWire ativo, o `pw-record` deve funcionar — mas isso não foi confirmado.
-- **Plano**: Rodar `pytest -q -m "integration and requires_pipewire"` em Fedora desktop.
-
-### 5. Transcrição local (sem teste com fala real)
-
-- **Status**: Pipeline faster-whisper integrado, mas sem validar transcrição de fala humana real.
-- **Comportamento**: `test_e2e_09_transcription_produces_text` valida que o pipeline não quebra com áudio sintético, mas onda senoidal 440Hz não produz texto reconhecível.
-- **Plano**: Fornecer fixture WAV com frase conhecida (ex: "Olá, este é um teste") e validar texto não vazio.
-
----
-
-## Roteiro para validação real em Fedora desktop
-
-### Pré-requisitos
-
-```bash
-# Fedora Workstation 40+ ou Fedora KDE
-sudo dnf install -y \
-  python3 python3-pip python3-tkinter \
-  tesseract tesseract-langpack-por tesseract-langpack-eng \
-  pipewire pipewire-utils pipewire-pulseaudio \
-  pulseaudio-libs-utils \
-  gcc gcc-c++ make
-
-# Verificar
-cat /etc/fedora-release
-pw-cli info 0
-systemctl --user status pipewire pipewire-pulse --no-pager
-pactl info
-pactl list short sources
-pactl list short sinks
-echo "$XDG_SESSION_TYPE"
-```
-
-### Passo 1: instalação
-
-```bash
-git clone -b feat/linux-fedora-support <repo>
-cd gravadorlegendas
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -e ".[linux,audio,dev]"
-```
-
-### Passo 2: rodar testes unitários (sanidade)
-
-```bash
-pytest -q -m "not integration"    # deve passar 152
-python3 -m flake8 src/            # deve estar limpo
-```
-
-### Passo 3: rodar testes de integração PipeWire
-
-```bash
-pytest -q -m "integration and requires_pipewire" -v
-```
-
-Cenários cobertos: E2E-03, E2E-04, E2E-05, E2E-06, E2E-07, E2E-08, E2E-13, E2E-14, E2E-15.
-
-### Passo 4: baixar modelo Whisper e rodar teste STT
-
-```bash
-python3 scripts/setup_audio_models.py   # baixa modelo base
-pytest -q -m "integration and requires_stt_model" -v
-```
-
-Cenários cobertos: E2E-09 (parcial — áudio sintético não é fala).
-
-### Passo 5: rodar teste OCR em X11
-
-```bash
-# Faça logout e entre em sessão Xorg se estiver em Wayland
-pytest -q -m "integration and requires_x11" -v
-```
-
-Cenários cobertos: E2E-11.
-
-### Passo 6: validar Wayland
-
-```bash
-# Faça logout e entre em sessão Wayland
-pytest -q -m "integration and requires_display" -k wayland -v
-```
-
-Cenários cobertos: E2E-12.
-
-### Passo 7: coletar evidências
-
-Após rodar todos os testes, gerar relatório em `artifacts/validation/`:
-
-```bash
-pytest -q -m "integration" -v --json-report --json-report-file=artifacts/validation/e2e_results.json
-```
+1. **Captura de tela em Wayland via portal**: não implementada. Em Wayland,
+   `ScreenCapture.capture()` lança `ScreenCaptureError` com mensagem clara
+   orientando X11 ou `xdg-desktop-portal`. (E2E-12 confirma o fallback seguro.)
+2. **`audio_source=both`**: validado em `validate_settings()`, mas `AudioManager`
+   não mixa microfone+sistema — apenas `device_index` único por vez.
+3. **Diarização em Linux**: código preservado intacto, sem validação (exige token HF).
+4. **E2E com fala humana**: a transcrição ainda não foi validada com voz real
+   (onda sintética produz texto vazio, como esperado).
+5. **OCR X11**: não testável nesta sessão Wayland; testes existem e pulam
+   graciosamente.
 
 ---
 
@@ -256,41 +131,44 @@ pytest -q -m "integration" -v --json-report --json-report-file=artifacts/validat
 
 | # | Regra | Status |
 |---|-------|--------|
-| 1 | Testes unitários e lint passam | ✅ Sim |
-| 2 | E2E-01 até E2E-10 passam em Fedora desktop | ❌ Não executados |
-| 3 | E2E-12 (Wayland) documentado e seguro | ⚠️ Teste existe mas não rodou |
-| 4 | Sem processos `pw-record` órfãos | ❌ Não validado (sem PipeWire) |
-| 5 | Transcrição local validada com áudio real | ❌ Não validado |
+| 1 | Testes unitários e lint passam | ✅ Sim (152 + flake8 limpo) |
+| 2 | E2E-01 até E2E-10 passam em Fedora desktop | ⚠️ Parcial — todos os testes automatizados passaram; resta fala humana + GUI manual |
+| 3 | E2E-12 (Wayland) documentado e seguro | ✅ Sim (3 testes passaram; fallback claro) |
+| 4 | Sem processos `pw-record` órfãos | ✅ Sim (0 órfãos após todas as suítes e repro 5 ciclos) |
+| 5 | Transcrição local validada com áudio real | ⚠️ Parcial — modelo `base` roda em ~0.5s e pipeline íntegro; resta voz humana |
 | 6 | Limitações explícitas no README e relatório | ✅ Sim |
 
-**Conclusão**: 3 de 6 regras atendidas. **A implementação NÃO pode ser marcada como "Fedora funcionalmente validado".**
+**Conclusão parcial**: 4/6 regras atendidas integralmente; regras 2 e 5 dependem
+do E2E final com fala humana e da inicialização manual da GUI.
 
 ---
 
 ## Próximos passos obrigatórios antes de declarar "verified"
 
-1. Provisionar VM Fedora Workstation 40+ com PipeWire ativo.
-2. Instalar dependências conforme README.
-3. Baixar modelo Whisper `base`.
-4. Conectar microfone físico ou criar fonte virtual.
-5. Reproduzir áudio de teste (navegador/player).
-6. Rodar todos os testes de integração e coletar evidências.
-7. Validar ausência de `pw-record` órfãos: `pgrep -c pw-record` deve retornar 0 após todos os testes.
-8. Validar transcrição de fala real: fornecer WAV com frase conhecida e confirmar texto não vazio.
-9. Validar OCR em X11 com texto PT conhecido na tela.
-10. Validar Wayland: app inicia, banner vermelho aparece, captura falha com mensagem clara.
-11. Após tudo passar, renomear o ZIP para `gravadorlegendas-fedora-multiplatform-<YYYYMMDD>-verified.zip`.
+1. E2E com fala humana: gravar a frase de teste (`teste de transcrição local no Fedora`)
+   via microfone real e confirmar transcrição não vazia no texto esperado.
+2. Inicializar manualmente a GUI em Wayland: app abre, banner Wayland aparece,
+   sem crash.
+3. Validar ausência de órfãos após o E2E manual: `pgrep -x pw-record` deve retornar 0.
+4. Atualizar este arquivo com o resultado final e o commit HEAD.
+5. Regenerar `MANIFEST.sha256` (via `git ls-files`) e empacotar.
+6. Renomear para `gravadorlegendas-fedora-multiplatform-<YYYYMMDD>-verified.zip`
+   **somente se** tudo acima passar; caso contrário, sufixo `-pending-real-e2e`.
 
 ---
 
 ## Conclusão
 
-A implementação está **arquiteturalmente completa e testada unitariamente**,
-mas **a validação funcional real em Fedora desktop é uma pendência
-que exige ambiente que não está disponível nesta execução**.
+A validação **automática em Fedora desktop real** está **completa e passando**,
+incluindo captura de áudio real (mic e monitor), transcritor local com modelo
+`base`, comportamento Wayland seguro e ausência de processos órfãos. Os bugs
+reais encontrados (locale pt_BR do pactl, NaN/Inf no monitor, deadlock de
+shutdown da fila, deadlock de fork no transcriber) foram corrigidos com testes
+de regressão.
 
-Nenhum commit foi feito direto na `main`. Todos os commits estão na branch
-`feat/linux-fedora-support`. O ZIP entregue contém o código completo,
-os testes de integração prontos para rodar (com skip gracioso quando os
-pré-requisitos não estão disponíveis), e este arquivo `VALIDATION_STATUS.md`
-documentando objetivamente o que foi e o que não foi validado.
+Faltam apenas o **E2E final com fala humana** e a **verificação manual da GUI**
+para habilitar o sufixo `-verified` no empacotamento.
+
+Nenhum commit foi feito na `main`; todos estão na branch
+`feat/linux-fedora-support`. O HEAD atual da branch tem 10 commits próprios
+após a cadeia do candidato.
