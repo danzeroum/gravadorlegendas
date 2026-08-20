@@ -10,6 +10,17 @@ from pathlib import Path
 
 import numpy as np
 
+# No Fedora/Linux, usar fork() para criar o processo de transcrição a partir
+# de um processo pai multi-threaded (torch/ctranslate2/tkinter) pode
+# deadlockar o filho. "spawn" reimporta o módulo num interpretador limpo e
+# evita esse deadlock. Aplicado globalmente porque o app e os testes criam
+# o TranscriberProcess depois de iniciar threads.
+if multiprocessing.get_start_method(allow_none=True) != "spawn":
+    try:
+        multiprocessing.set_start_method("spawn", force=True)
+    except (RuntimeError, ValueError):  # pragma: no cover
+        pass
+
 
 # Cache único de modelos Whisper. O setup (`scripts/setup_audio_models.py`)
 # baixa para o MESMO diretório, então o app não re-baixa e os testes de
