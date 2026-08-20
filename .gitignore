@@ -57,3 +57,8 @@ Thumbs.db
 # Manifests e checksums locais (gerados no build do ZIP)
 # MANIFEST.sha256 é commitado explicitamente quando gerado
 # (não ignore aqui — é parte do entregável)
+
+# Artefatos de build (pip editable)
+*.egg-info/
+build/
+dist/
