@@ -13,7 +13,8 @@ pip-log.txt
 # Environments
 .env
 .env.*
-!.env.example  # mantém o exemplo, ignora os demais
+# Mantém o exemplo como contrato de configuração, ignora os demais
+!.env.example
 
 # Coverage
 .coverage
@@ -26,6 +27,8 @@ data/
 # Artefatos de validação — logs sanitizados, hashes, evidências E2E
 # Mantemos o diretório via .gitkeep, mas o conteúdo é local e sensível
 # (pode conter trechos de transcrição ou metadados de dispositivos).
+artifacts/
+!artifacts/validation/
 artifacts/validation/*
 !artifacts/validation/.gitkeep
 
