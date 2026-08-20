@@ -1,14 +1,24 @@
 # Relatório Técnico — Migração para Fedora Linux
 
 **Projeto:** gravadorlegendas
-**Branch:** `feat/linux-fedora-support`
+**Branch:** `main` (merge do PR #1)
 **Data:** 2026-08-20
+**Commit main final:** `b315463` (merge do PR #1)
+**CI (PR #1):** ✅ verde — `lint` pass + `test` pass
 **Status global:** ✅ **FEDORA_FUNCTIONALLY_VALIDATED**
 
 > **ESTADO ATUAL**: a migração foi implementada e **validada em Fedora desktop
-> real** (Fedora 44, Wayland/GNOME, PipeWire ativo). A validação completa está
-> documentada no **Apêndice A — Validação real Fedora (2026-08-20)** ao final
-> deste relatório e em `VALIDATION_STATUS.md` (status objetivo por cenário E2E).
+> real** (Fedora 44, Wayland/GNOME, PipeWire ativo) e o PR #1 foi **mergeado na
+> `main`** com **CI verde**. A validação completa está documentada no
+> **Apêndice A — Validação real Fedora (2026-08-20)** ao final deste relatório
+> e em `VALIDATION_STATUS.md` (status objetivo por cenário E2E).
+>
+> Após a validação, apenas duas mudanças não-funcionais foram feitas via PR:
+> `d439dad` (alinhamento do `flake8` do CI ao config do projeto em
+> `pyproject.toml`) e `8c47feb` (coleta condicional de `tests/test_audio_vad.py`
+> via `pytest.importorskip` quando `silero-vad` não está instalado — CI instala
+> apenas `requirements.txt`). **Nenhuma alteração de runtime** foi feita após a
+> validação funcional Fedora.
 >
 > As seções 6 a 12 abaixo descrevem o estado **no momento da implementação**
 > (antes da validação real) e são mantidas como histórico. O Apêndice A reflete

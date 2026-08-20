@@ -1,9 +1,30 @@
 # Status de Validação — gravadorlegendas Fedora Multiplatform
 
 **Data de atualização:** 2026-08-20
-**Branch:** `feat/linux-fedora-support`
-**Commit HEAD (conteúdo validado):** `476e910`
+**Branch:** `main` (merge do PR #1)
+**Commit HEAD (main final):** `b315463`
+**Commit do conteúdo validado:** `476e910` (referenciado pelos testes)
 **Status global:** ✅ **FEDORA_FUNCTIONALLY_VALIDATED**
+
+---
+
+## Alinhamento pós-merge (PR #1)
+
+O PR #1 (`feat/linux-fedora-support` → `main`) foi **mergeado** no commit
+`b315463` ("Merge pull request #1 from danzeroum/feat/linux-fedora-support")
+e o **CI ficou verde** (lint + test pass em `ubuntu-latest`, Python 3.11).
+
+Últimos commits do PR incluídos na `main`:
+
+| Commit | Descrição | Impacto em runtime |
+|--------|-----------|--------------------|
+| `d439dad` | `ci(lint)`: alinha `flake8` do CI ao config do projeto (`--max-line-length=100 --extend-ignore=E501,W503,E203`) | Nenhum — apenas `.github/workflows/ci.yml` |
+| `8c47feb` | `test(vad)`: `pytest.importorskip("silero_vad")` — CI instala só `requirements.txt` (base); o módulo pula graciosamente sem `silero-vad` e mantém os 3 testes no ambiente com extras de áudio | Nenhum — apenas `tests/test_audio_vad.py` |
+
+**Declaração**: as mudanças pós-validação são **relativas à configuração de CI
+e à coleta condicional de testes** — nenhuma alteração de runtime foi feita
+após a validação funcional Fedora. Os resultados da matriz E2E e do critério
+de qualidade STT permanecem válidos sobre o mesmo conteúdo (`476e910`).
 
 > **Estados objetivos usados neste documento**: `PASSED`, `FAILED`,
 > `NOT_EXECUTED`, `SKIPPED_MISSING_PREREQUISITE`. OCR em X11 é marcado
@@ -228,5 +249,5 @@ PipeWire).
 (não validado nesta sessão); captura de tela em Wayland usa apenas fallback
 seguro (portal não implementado).
 
-Nenhum commit foi feito na `main`; todos estão na branch
-`feat/linux-fedora-support`.
+O conteúdo validado está agora na **`main`** (merge do PR #1, commit
+`b315463`), com CI verde e sem alteração de runtime pós-validação.
