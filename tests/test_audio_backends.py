@@ -5,6 +5,7 @@ ou PipeWire rodando.
 """
 from __future__ import annotations
 
+import subprocess
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -103,6 +104,39 @@ Source #43
         assert "input" in kinds
         assert all(d.backend == "pipewire" for d in devices)
 
+    def test_run_pactl_list_forces_c_locale(self):
+        """Regressão: pactl deve rodar com locale C para saída estável em inglês.
+
+        Em desktops Fedora com locale pt_BR, o pactl traduz os cabeçalhos
+        ("Fonte #N", "Estado:") e o parser de dispositivos quebrava,
+        retornando [] mesmo com microfone e monitor presentes.
+        """
+        from src.audio.backends.pipewire import devices as devmod
+
+        captured: dict = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            captured["env"] = kwargs.get("env")
+            class _R:
+                returncode = 0
+                stdout = "Source #1\n\tState: RUNNING\n"
+                stderr = ""
+            return _R()
+
+        with patch.object(subprocess, "run", side_effect=fake_run):
+            with patch.object(devmod, "_have_pactl", return_value=True):
+                out = devmod._run_pactl_list("sources")
+
+        assert captured["cmd"] == ["pactl", "list", "sources"]
+        env = captured["env"]
+        assert env is not None
+        assert env["LC_ALL"] == "C"
+        assert env["LANG"] == "C"
+        assert out.startswith("Source #1"), (
+            f"Saída do pactl deveria estar em inglês, mas recebeu: {out!r}"
+        )
+
     def test_is_running_initial_false(self):
         from src.audio.backends.pipewire.capture import PipewireCapture
         cap = PipewireCapture()
@@ -112,6 +146,61 @@ Source #43
         from src.audio.backends.pipewire.capture import PipewireCapture
         cap = PipewireCapture()
         cap.stop()  # não deve lançar
+
+    def test_pump_stdout_sanitizes_nan_inf(self):
+        """Regressão: chunk f32 com NaN/Inf (fonte monitor idle) vira 0.
+
+        Em Fedora, o monitor do sink idle entrega amostras NaN que
+        quebravam o cast para int16 com RuntimeWarning e produziam
+        valores indefinidos no PCM.
+        """
+        import io
+        import queue
+
+        import numpy as np
+
+        from src.audio.backends.pipewire.capture import PipewireCapture
+
+        cap = PipewireCapture(device_id="50", sample_rate=16000, chunk_size=480)
+        q: queue.Queue = queue.Queue()
+        cap._queue = q
+        cap._is_running = True
+
+        arr = np.zeros(480, dtype=np.float32)
+        arr[0] = np.nan
+        arr[1] = np.inf
+        arr[2] = -np.inf
+        arr[3] = 0.5
+        stream = io.BytesIO(arr.tobytes())
+
+        cap._pump_stdout(stream)
+        cap._is_running = False
+
+        assert q.qsize() == 1, "Nenhum chunk publicado na fila"
+        out = np.frombuffer(q.get(), dtype=np.int16)
+        assert out[0] == 0, "NaN deveria virar 0"
+        assert out[1] == 0, "+Inf deveria virar 0"
+        assert out[2] == 0, "-Inf deveria virar 0"
+        assert abs(int(out[3])) > 0, "0.5 deveria produzir sample não-zero"
+
+    def test_drain_queue_empties_pending_data(self):
+        """Regressão: _drain_queue libera o feeder do multiprocessing.Queue.
+
+        Sem a drenagem em stop(), dados não lidos deixavam o feeder thread
+        bloqueado num pipe cheio e o processo Python não encerrava após
+        start/stop sem leitura (ex.: E2E-08/E2E-13 e o próprio app).
+        """
+        import queue
+
+        from src.audio.backends.pipewire.capture import PipewireCapture
+
+        cap = PipewireCapture(device_id="50", sample_rate=16000, chunk_size=480)
+        q: queue.Queue = queue.Queue()
+        for _ in range(50):
+            q.put(b"\x00" * 960)
+        cap._queue = q
+        cap._drain_queue()
+        assert q.empty(), "Drenagem deveria esvaziar a fila"
 
     def test_start_without_pw_record_raises(self):
         from src.audio.backends.pipewire.capture import PipewireCapture

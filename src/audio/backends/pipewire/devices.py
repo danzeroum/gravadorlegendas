@@ -11,6 +11,7 @@ Por que pactl e não pw-cli?
 from __future__ import annotations
 
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -32,6 +33,21 @@ def _have_pactl() -> bool:
     return shutil.which("pactl") is not None
 
 
+def _pactl_env() -> dict:
+    """Força locale C para que `pactl` emita saída em inglês.
+
+    Em desktops com locale pt_BR (ex.: Fedora GNOME em português), o
+    `pactl` traduz os cabeçalhos dos blocos ("Fonte #50", "Estado:",
+    "Descrição:"), o que quebra o parser que espera keywords estáveis
+    em inglês ("Source #", "State:", "Description:"). Forçar
+    LC_ALL/LANG=C normaliza a saída independente do locale do usuário.
+    """
+    env = os.environ.copy()
+    for var in ("LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"):
+        env[var] = "C"
+    return env
+
+
 def _run_pactl_list(kind: str) -> str:
     """Roda ``pactl list <kind>`` (sources | sinks | source-outputs)."""
     if not _have_pactl():
@@ -43,6 +59,7 @@ def _run_pactl_list(kind: str) -> str:
             text=True,
             timeout=8,
             check=False,
+            env=_pactl_env(),
         )
         if proc.returncode != 0:
             _logger.warning(

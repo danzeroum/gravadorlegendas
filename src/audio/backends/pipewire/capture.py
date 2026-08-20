@@ -20,6 +20,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 from typing import IO
 
 from src.audio.backends.pipewire.devices import list_pipewire_devices
@@ -85,6 +86,11 @@ class PipewireCapture:
         if self._thread:
             self._thread.join(timeout=2.0)
             self._thread = None
+        # Drena qualquer dado restante da fila. Sem isso, o feeder thread
+        # do multiprocessing.Queue pode ficar bloqueado escrevendo num pipe
+        # cheio e o interpretador Python nunca encerra ao sair (hang pós-
+        # stop, inclusive no shutdown de testes).
+        self._drain_queue()
 
     @property
     def is_running(self) -> bool:
@@ -153,11 +159,14 @@ class PipewireCapture:
 
             # f32 -> s16le
             try:
-                arr = (
-                    np.frombuffer(raw, dtype=np.float32)
-                    * 32767.0
-                ).astype(np.int16)
-                pcm_s16 = arr.tobytes()
+                arr = np.frombuffer(raw, dtype=np.float32)
+                # Fontes monitor idles podem entregar NaN/Inf (sem áudio).
+                # Sanitiza para 0 antes do cast — evita valores indefinidos
+                # e RuntimeWarning "invalid value encountered in cast".
+                arr = np.nan_to_num(
+                    arr, nan=0.0, posinf=0.0, neginf=0.0
+                )
+                pcm_s16 = (arr * 32767.0).astype(np.int16).tobytes()
             except Exception as e:
                 _logger.warning("Falha na conversão PCM: %s", e)
                 continue
@@ -167,6 +176,26 @@ class PipewireCapture:
                     self._queue.put(pcm_s16)
                 except Exception:
                     pass
+
+    def _drain_queue(self) -> None:
+        """Descarta dados restantes da fila (non-blocking, best-effort).
+
+        Chamado em ``stop()`` para liberar o feeder thread do
+        ``multiprocessing.Queue``. Se o consumidor parou antes de ler toda
+        a fila, o feeder pode travar escrevendo num pipe cheio e impedir o
+        encerramento limpo do processo Python.
+        """
+        if self._queue is None:
+            return
+        try:
+            deadline = time.monotonic() + 0.5
+            while time.monotonic() < deadline:
+                try:
+                    self._queue.get_nowait()
+                except Exception:
+                    break
+        except Exception:
+            pass
 
     def _read_stderr_nonblock(self) -> str:
         """Lê stderr do pw-record sem bloquear (best-effort)."""
