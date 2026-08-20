@@ -6,7 +6,34 @@ principal, evitando bloqueio da UI.
 import multiprocessing
 import queue
 import time
+from pathlib import Path
+
 import numpy as np
+import structlog
+
+_logger = structlog.get_logger()
+
+# No Fedora/Linux, usar fork() para criar o processo de transcrição a partir
+# de um processo pai multi-threaded (torch/ctranslate2/tkinter) pode
+# deadlockar o filho. "spawn" reimporta o módulo num interpretador limpo e
+# evita esse deadlock. Aplicado globalmente porque o app e os testes criam
+# o TranscriberProcess depois de iniciar threads.
+if multiprocessing.get_start_method(allow_none=True) != "spawn":
+    try:
+        multiprocessing.set_start_method("spawn", force=True)
+    except (RuntimeError, ValueError):  # pragma: no cover
+        pass
+
+
+# Cache único de modelos Whisper. O setup (`scripts/setup_audio_models.py`)
+# baixa para o MESMO diretório, então o app não re-baixa e os testes de
+# integração verificam exatamente o mesmo local.
+WHISPER_DOWNLOAD_ROOT = Path.home() / ".cache" / "gravador" / "audio" / "whisper"
+
+
+def whisper_model_dir(model_size: str) -> Path:
+    """Diretório (layout snapshot do HF Hub) do modelo no cache do app."""
+    return WHISPER_DOWNLOAD_ROOT / f"models--Systran--faster-whisper-{model_size}"
 
 
 class TranscriberProcess(multiprocessing.Process):
@@ -17,6 +44,17 @@ class TranscriberProcess(multiprocessing.Process):
         output_queue: Queue onde resultados de transcrição são enviados.
         model_size: Tamanho do modelo Whisper (tiny, base, small, etc.).
         chunk_duration: Duração alvo de cada batch em segundos.
+        language: Idioma forçado do Whisper (ex.: "pt"). Padrão "pt" para
+            o mercado-alvo; o pipeline captura PCM pt-BR.
+        task: Tarefa do Whisper ("transcribe" ou "translate"). Sempre
+            "transcribe" para legendagem.
+        beam_size: Tamanho do beam do Whisper. Em voz sintética/robótica
+            (espeak) o beam=1 + temperature=0 transcreve com mais fidelidade;
+            em fala humana natural beam=5 costuma ser melhor.
+        temperature: Temperatura de amostragem. 0.0 = greedy, determinístico.
+        vad_filter: Silero VAD antes da transcrição. Elimina as alucinações
+            repetitivas do Whisper em silêncio ("e o que é o que é...") sem
+            descartar a fala real; habilitado por padrão.
     """
 
     def __init__(
@@ -24,13 +62,23 @@ class TranscriberProcess(multiprocessing.Process):
         input_queue: multiprocessing.Queue,
         output_queue: multiprocessing.Queue,
         model_size: str = "base",
-        chunk_duration: float = 1.0,
+        chunk_duration: float = 7.0,
+        language: str = "pt",
+        task: str = "transcribe",
+        beam_size: int = 1,
+        temperature: float = 0.0,
+        vad_filter: bool = True,
     ):
         super().__init__(daemon=True)
         self._input = input_queue
         self._output = output_queue
         self._model_size = model_size
         self._chunk_size = int(16000 * 2 * chunk_duration)
+        self._language = language
+        self._task = task
+        self._beam_size = beam_size
+        self._temperature = temperature
+        self._vad_filter = vad_filter
         self._stop_event = multiprocessing.Event()
 
     def stop(self):
@@ -41,7 +89,11 @@ class TranscriberProcess(multiprocessing.Process):
         """Loop principal de transcrição."""
         try:
             from faster_whisper import WhisperModel
-            model = WhisperModel(self._model_size, device="cpu")
+            model = WhisperModel(
+                self._model_size,
+                device="cpu",
+                download_root=str(WHISPER_DOWNLOAD_ROOT),
+            )
         except ImportError:
             self._output.put({"error": "faster-whisper não instalado"})
             return
@@ -69,18 +121,53 @@ class TranscriberProcess(multiprocessing.Process):
                 audio_buffer = audio_buffer[self._chunk_size:]
 
                 elapsed = time.monotonic() - session_start
-                seg_start = round(elapsed - 1.0, 2)
+                batch_dur = self._chunk_size / (16000.0 * 2)
+                seg_start = round(elapsed - batch_dur, 2)
                 seg_end = round(elapsed, 2)
                 batch_index += 1
+
+                # Validação do formato PCM esperado: s16le mono 16kHz.
+                # O buffer é montado a partir de chunks de 960 bytes
+                # (480 frames x 2 bytes) com sample_rate=16000 fixo. Qualquer
+                # desvio (rate/canais incorretos) quebra esta assunção.
+                if len(buf) % 2 != 0 or len(buf) == 0:
+                    _logger.error(
+                        "stt_batch_invalid_pcm",
+                        batch=batch_index,
+                        bytes=len(buf),
+                    )
+                    continue
 
                 audio_array = (
                     np.frombuffer(buf, dtype=np.int16).astype(np.float32)
                     / 32768.0
                 )
 
+                # Diagnóstico do áudio que entra no Whisper: duração, RMS e
+                # pico. Essencial para distinguir falha de qualidade (sinal
+                # baixo/clipado) de falha de transcrição.
+                _dur = len(audio_array) / 16000.0
+                _rms = float(np.sqrt(np.mean(audio_array ** 2)))
+                _peak = float(np.max(np.abs(audio_array)))
+
                 try:
-                    segments, _ = model.transcribe(audio_array, language="pt")
+                    segments, _ = model.transcribe(
+                        audio_array,
+                        language=self._language,
+                        task=self._task,
+                        beam_size=self._beam_size,
+                        temperature=self._temperature,
+                        vad_filter=self._vad_filter,
+                    )
                     text = " ".join(seg.text for seg in segments)
+                    _logger.info(
+                        "stt_batch_done",
+                        batch=batch_index,
+                        duration=round(_dur, 2),
+                        rms=round(_rms, 4),
+                        peak=round(_peak, 4),
+                        text=text.strip(),
+                    )
                     if text.strip():
                         self._output.put({
                             "text": text.strip(),

@@ -1,5 +1,11 @@
-import silero_vad as _real_silero
+import pytest
+
 from src.audio.vad import VoiceActivityDetector
+
+_real_silero = pytest.importorskip(
+    "silero_vad",
+    reason="silero-vad nao instalado (requer requirements/audio.txt)",
+)
 
 
 class TestVoiceActivityDetector:

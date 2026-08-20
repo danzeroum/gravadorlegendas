@@ -1,76 +1,108 @@
-# Gravador de Reunião
+# Gravador de Legendas
 
-Captura, transcreve, traduz e processa legendas da tela em tempo real com OCR, captura de áudio, diarização de falantes e LLM local.
+Captura, transcreve, traduz e processa legendas em tempo real com OCR,
+captura de áudio, diarização de falantes e LLM local — **multiplataforma**
+(Windows + Fedora Linux, com suporte parcial a Wayland).
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Code style: flake8](https://img.shields.io/badge/code%20style-flake8-000000.svg)](https://github.com/PyCQA/flake8)
+[![Platforms: Windows + Linux](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20Fedora-green.svg)](#instalação)
 [![tests](https://github.com/danzeroum/gravadorlegendas/actions/workflows/ci.yml/badge.svg)](https://github.com/danzeroum/gravadorlegendas/actions/workflows/ci.yml)
 
 ---
 
 ## Funcionalidades
 
-- **Captura de tela** — região configurável, OCR com suporte a múltiplos idiomas (inglês, português, espanhol)
-- **Tradução local** — MarianMT (opus-mt-tc-big-en-pt) com fallback para API (OpenAI / DeepSeek)
-- **Áudio ao vivo** — captura WASAPI loopback, transcrição com faster-whisper, VAD (silero-vad)
-- **Diarização** — identificação de falantes em tempo real ou offline (diart + pyannote.audio)
-- **Exportação** — transcrição com rótulos de falante em Markdown
-- **LLM pluggável** — Ollama (Basic Auth + NDJSON), OpenAI, DeepSeek, LocalGGUF
-- **Resumo automático** da reunião via LLM, incluindo contexto de áudio + OCR
-- **Detecção de perguntas** e sugestão de respostas em Globish
-- **Filtro de ruído** do OCR com wordlist e heurísticas
-- **Interface gráfica** CustomTkinter com 7 abas
-- **Servidor HTTP** (FastAPI) para implantação em Docker/VPS
+- **Captura de tela** — região configurável, OCR com suporte a múltiplos idiomas (inglês, português, espanhol). Funciona em X11 e Windows; Wayland requer `xdg-desktop-portal`.
+- **Tradução local** — MarianMT (`opus-mt-tc-big-en-pt`) com fallback para API (OpenAI / DeepSeek).
+- **Áudio ao vivo** — captura multiplataforma:
+  - **Windows**: WASAPI loopback (PyAudio).
+  - **Linux (Fedora)**: PipeWire via `pw-record` (microfone e áudio do sistema).
+- **Transcrição local** — `faster-whisper` (CPU ou CUDA).
+- **VAD** — `silero-vad` para detecção de fala.
+- **Diarização** — identificação de falantes em tempo real ou offline (diart + pyannote.audio).
+- **Exportação** — transcrição com rótulos de falante em Markdown.
+- **LLM pluggável** — Ollama (Basic Auth + NDJSON), OpenAI, DeepSeek, LocalGGUF.
+- **Resumo automático** da reunião via LLM, incluindo contexto de áudio + OCR.
+- **Detecção de perguntas** e sugestão de respostas em Globish.
+- **Filtro de ruído** do OCR com wordlist e heurísticas.
+- **Interface gráfica** CustomTkinter com 7 abas, adaptando-se por capacidade (não por SO).
+- **Servidor HTTP** (FastAPI) para implantação em Docker/VPS.
 
 ---
 
 ## Pré-requisitos
 
+### Comuns a todas as plataformas
+
 - Python 3.10+
 - [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) instalado no sistema
-  - Windows: `choco install tesseract` ou [site oficial](https://github.com/UB-Mannheim/tesseract/wiki)
-  - Linux: `sudo apt install tesseract-ocr tesseract-ocr-por tesseract-ocr-eng`
-- (Opcional) GPU NVIDIA com CUDA para acelerar faster-whisper
+  - Pacotes de idioma: português (`por`) e inglês (`eng`)
+- (Opcional) GPU NVIDIA com CUDA para acelerar `faster-whisper`
 - (Opcional) Conta [Hugging Face](https://huggingface.co) com token aceito para `pyannote/speaker-diarization-3.1`
+
+### Fedora Linux — pacotes de sistema
+
+```bash
+sudo dnf install -y \
+  python3 python3-pip python3-tkinter \
+  tesseract tesseract-langpack-por tesseract-langpack-eng \
+  pipewire pipewire-utils pipewire-pulseaudio \
+  pulseaudio-libs-utils \
+  gcc gcc-c++ make
+```
+
+> **Por que esses pacotes?**
+>
+> - `python3-tkinter` — CustomTkinter depende do Tk.
+> - `tesseract-langpack-*` — OCR em português e inglês.
+> - `pipewire` + `pipewire-utils` — servidor de áudio + `pw-record`/`pw-cli` para captura.
+> - `pipewire-pulseaudio` — camada de compatibilidade PulseAudio (necessária para `pactl`, usado na descoberta de dispositivos).
+> - `pulseaudio-libs-utils` — fornece `pactl` como fallback caso PipeWire-Pulse não esteja configurado.
+> - `gcc`/`gcc-c++`/`make` — apenas se for compilar extensões nativas (geralmente não é necessário com wheels pré-compiladas).
+
+### Windows
+
+- Tesseract OCR: `choco install tesseract` ou [site oficial](https://github.com/UB-Mannheim/tesseract/wiki)
+- PyAudio: geralmente pré-compilado via pip (`pip install PyAudio`)
 
 ---
 
 ## Instalação
 
+### Fedora Linux
+
 ```bash
 git clone https://github.com/danzeroum/gravadorlegendas.git
 cd gravadorlegendas
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -e ".[linux,audio]"
 
-# Ambiente virtual (recomendado)
-python -m venv venv
-source venv/bin/activate  # Linux
-venv\Scripts\activate     # Windows
-
-# Dependências base (OCR, tradução, LLM)
-pip install -e .
-
-# Com suporte a áudio (transcrição + diarização)
-pip install -e ".[audio]"
-
-# Ou instalar apenas os requisitos de áudio manualmente
-pip install -r requirements/audio.txt
-
-# Configuração
+# Copiar configuração de exemplo
 cp .env.example .env
-# Edite .env com suas chaves de API e credenciais
+# Edite .env conforme necessário (provedores LLM, idioma OCR, etc.)
 ```
 
-### Diarização (opcional)
+### Windows (PowerShell)
 
-Para identificação de falantes, instale dependências extras e aceite os termos da HF:
+```powershell
+git clone https://github.com/danzeroum/gravadorlegendas.git
+cd gravadorlegendas
+python -m venv venv
+venv\Scripts\activate
+pip install --upgrade pip
+pip install -e ".[windows,audio]"
+
+copy .env.example .env
+```
+
+### Diarização (opcional, em qualquer plataforma)
 
 ```bash
-pip install diart pyannote.audio
-
-# Faça login na Hugging Face e aceite os termos em:
-# https://huggingface.co/pyannote/speaker-diarization-3.1
-huggingface-cli login
+pip install -e ".[diarization]"
+huggingface-cli login  # aceite os termos em pyannote/speaker-diarization-3.1
 ```
 
 ---
@@ -91,7 +123,13 @@ python -m src.main
 | Resumo | Gerar resumo do conteúdo capturado (OCR + áudio) |
 | Respostas | Detectar perguntas e gerar respostas Globish |
 | IA | Configurar provider LLM ativo (Ollama, OpenAI, DeepSeek, LocalGGUF) |
-| Config | Tema, região de captura, atalhos |
+| Config | Tema, região de captura, atalhos, **backends multiplataforma** |
+
+A aba **Config** agora exibe as configurações detectadas:
+- Sistema operacional e sessão gráfica (X11/Wayland).
+- Backend de áudio ativo (wasapi/pipewire).
+- Fonte de legenda ativa (windows_live_captions/local_stt/screen_ocr).
+- Modelo Whisper e device STT (auto/cpu/cuda).
 
 #### Atalhos de teclado
 
@@ -102,6 +140,51 @@ python -m src.main
 | `Ctrl+R` | Abrir aba Resumo |
 | `Ctrl+S` | Abrir aba Respostas |
 | `Ctrl+E` | Alternar tema |
+
+### Modos de captura
+
+#### Microfone (Linux)
+
+1. Aba Áudio → clique em "🔄 Atualizar Dispositivos".
+2. Selecione a fonte com prefixo `🎤` (input).
+3. Clique em "🎤 Iniciar Captura".
+
+#### Áudio do sistema (Linux)
+
+1. **Pré-requisito**: precisa haver um sink de saída ativo (tocando som).
+2. Aba Áudio → clique em "🔄 Atualizar Dispositivos".
+3. Selecione a fonte com prefixo `🔊` (monitor).
+4. Clique em "🎤 Iniciar Captura".
+5. Se nenhuma fonte monitor aparecer, rode `python3 scripts/diagnose_linux_audio.py`.
+
+#### Transcrição local (Linux e Windows)
+
+- É o **modo padrão em Linux** (`caption_source=auto` resolve para `local_stt`).
+- Requer `pip install -e ".[audio]"` (faster-whisper).
+- O modelo Whisper é baixado automaticamente no primeiro uso para `~/.cache/gravador/audio/whisper/`.
+- Para forçar modo STT local em Windows, defina `CAPTION_SOURCE=local_stt` no `.env`.
+
+#### OCR de tela (opcional)
+
+- Funciona em X11 e Windows via `mss`.
+- Em Wayland sem `xdg-desktop-portal`, a captura falha com mensagem clara.
+- **Workaround em Wayland**: faça logout e entre em sessão "Xorg" no gerenciador de login (GDM/SDDM/LightDM).
+
+#### Wayland
+
+- A aplicação **inicia** em Wayland sem crash.
+- A aba Captura mostra banner vermelho avisando da limitação.
+- A aba Áudio funciona normalmente (PipeWire é independente da sessão gráfica).
+- Para OCR de tela, use sessão X11.
+
+### Diagnóstico de áudio (Linux)
+
+```bash
+python3 scripts/diagnose_linux_audio.py
+```
+
+Mostra sistema operacional, sessão, status do PipeWire, fontes disponíveis
+(microfones + monitores), sinks, permissões e orientações.
 
 ### Servidor HTTP (Docker)
 
@@ -139,8 +222,16 @@ A configuração ativa é definida na aba **IA** da interface ou via API. O prov
 
 ```
 src/
-├── audio/                   # Captura e processamento de áudio
-│   ├── capture.py           #   WASAPI loopback (PyAudio)
+├── platform/                # NOVO — camada de abstração multiplataforma
+│   ├── detection.py         #   detecta OS, sessão, capacidades
+│   ├── types.py             #   AudioDevice, AudioCaptureBackend Protocol, etc.
+│   └── selector.py          #   seleção automática de backends
+├── audio/
+│   ├── backends/            # NOVO — backends concretos
+│   │   ├── wasapi/          #   Windows (PyAudio + WASAPI loopback)
+│   │   ├── pipewire/        #   Linux (pw-record subprocess + pactl discovery)
+│   │   └── factory.py       #   construção com seleção automática
+│   ├── capture.py           #   Fachada retrocompatível (delegação)
 │   ├── vad.py               #   Voice Activity Detection (silero-vad)
 │   ├── buffer.py            #   Buffer circular thread-safe
 │   ├── transcribe.py        #   Transcrição (faster-whisper em Process)
@@ -148,54 +239,75 @@ src/
 │   ├── manager.py           #   Orquestração com 2 filas + merge
 │   ├── metrics.py           #   Latência e sobreposição
 │   └── models.py            #   Download/cache de modelos
-├── capture/                 # Captura de tela (mss) + pré-processamento
+├── caption/                 # NOVO — fontes de legenda abstraídas
+│   ├── base.py              #   CaptionSourceBase
+│   ├── windows_live.py      #   Win+Ctrl+L (apenas Windows)
+│   ├── local_stt.py         #   Transcrição local (Win + Linux)
+│   ├── screen_ocr.py        #   OCR de tela (X11 + Windows)
+│   └── factory.py           #   build_caption_source()
+├── capture/                 # Captura de tela (mss) + ativação de legendas Windows
+│   ├── screen_capture.py    #   agora detecta Wayland e dá erro claro
+│   └── activate_windows_captions.py  # no-op defensivo em Linux
 ├── ocr/                     # OCR (pytesseract)
 ├── translation/             # Tradução (Strategy Pattern)
 ├── nlp/                     # Processamento de linguagem
 ├── filter/                  # Filtro de ruído do OCR
 ├── llm/                     # Sistema de LLM pluggável
-│   ├── base.py              #   Provider ABC
-│   ├── registry.py          #   ProviderRegistry singleton
-│   ├── manager.py           #   LLMManager singleton
-│   └── providers/           #   Implementações
-│       ├── openai.py
-│       ├── deepseek.py
-│       ├── ollama.py        #   Basic Auth + NDJSON
-│       └── local_gguf.py    #   CPU-only, opcional
 ├── storage/                 # Persistência em arquivo
-├── ui/                      # Interface CustomTkinter
-│   └── app.py               #   7 abas, tema, atalhos
+├── ui/                      # Interface CustomTkinter (adaptativa por capacidade)
 ├── api/                     # Servidor HTTP (FastAPI)
-├── config.py                # Configuração (.env)
+├── config.py                # Configuração (.env) + validação multiplataforma
 ├── config_store.py          # Config JSON (LLM, speaker_map)
 └── main.py                  # Orquestração (SessionManager)
 
-tests/                       # 63 testes — pytest
-├── test_audio_buffer.py
-├── test_audio_metrics.py
-├── test_audio_vad.py
-├── test_audio_manager.py
-├── test_audio_diarize.py
-└── ...
+scripts/
+├── diagnose_audio_device.py    # Diagnóstico WASAPI (Windows)
+├── diagnose_linux_audio.py     # NOVO — Diagnóstico PipeWire (Linux)
+└── setup_audio_models.py       # Download de modelos Whisper/Silero
+
+tests/                       # 152 testes — pytest
+├── test_platform_detection.py  # NOVO
+├── test_platform_selector.py   # NOVO
+├── test_audio_backends.py      # NOVO
+├── test_caption_sources.py     # NOVO
+├── test_config_validation.py   # NOVO
+└── ... (testes originais preservados)
 ```
 
 ---
 
 ## Configuração
 
-Variáveis de ambiente (`.env`):
+Variáveis de ambiente (`.env`) — veja `.env.example` para o template completo.
+
+### Multiplataforma (novo)
 
 | Variável | Padrão | Descrição |
 |----------|--------|-----------|
+| `PLATFORM_BACKEND` | `auto` | `auto` \| `windows` \| `linux` |
+| `AUDIO_BACKEND` | `auto` | `auto` \| `wasapi` \| `pipewire` |
+| `AUDIO_SOURCE` | `system` | `microphone` \| `system` \| `both` \| `device` |
+| `AUDIO_DEVICE_ID` | (vazio) | ID do dispositivo (vazio = padrão) |
+| `CAPTION_SOURCE` | `auto` | `auto` \| `windows_live_captions` \| `local_stt` \| `screen_ocr` |
+| `SCREEN_CAPTURE_BACKEND` | `auto` | `auto` \| `mss` \| `portal` |
+| `STT_MODEL` | `base` | Tamanho do modelo Whisper |
+| `STT_DEVICE` | `auto` | `auto` \| `cpu` \| `cuda` |
+| `SAMPLE_RATE` | `16000` | Taxa de amostragem (Hz) |
+| `CHANNELS` | `1` | Número de canais (1=mono) |
+
+### Tradicionais (preservadas)
+
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `TESSERACT_PATH` | (auto) | Vazio = usar do PATH; Windows default: `C:\Program Files\Tesseract-OCR\tesseract.exe` |
+| `OCR_LANGUAGE` | `eng` | Idioma do OCR |
+| `TRANSLATION_MODEL` | `Helsinki-NLP/opus-mt-tc-big-en-pt` | Modelo MarianMT |
 | `OPENAI_API_KEY` | — | Chave da API OpenAI |
 | `DEEPSEEK_API_KEY` | — | Chave da API DeepSeek |
 | `OLLAMA_BASE_URL` | `https://api.buildtovalue.cloud` | URL do servidor Ollama |
 | `OLLAMA_USERNAME` | — | Usuário Basic Auth |
 | `OLLAMA_PASSWORD` | — | Senha Basic Auth |
 | `OLLAMA_MODEL` | `mistral:latest` | Modelo Ollama |
-| `TESSERACT_PATH` | `C:\Program Files\...` | Caminho do Tesseract |
-| `OCR_LANGUAGE` | `eng` | Idioma do OCR |
-| `TRANSLATION_MODEL` | `Helsinki-NLP/opus-mt-tc-big-en-pt` | Modelo de tradução |
 | `REGION_TOP/LEFT/WIDTH/HEIGHT` | `0,50,1820,80` | Região de captura |
 
 ---
@@ -203,10 +315,110 @@ Variáveis de ambiente (`.env`):
 ## Testes
 
 ```bash
-pytest tests/ -v                # 63 testes
-pytest tests/ --cov=src         # Com cobertura
-flake8 src/ --max-line-length=100
+# Todos os testes unitários (sem hardware, sem rede, sem GPU)
+pytest -q
+
+# Excluir testes de integração (default: nenhum marcado integration)
+pytest -m "not integration"
+
+# Com cobertura
+pytest tests/ --cov=src
+
+# Apenas testes da nova camada de plataforma
+pytest tests/test_platform_detection.py tests/test_platform_selector.py -v
 ```
+
+### Marcadores de teste
+
+| Marcador | Significado |
+|----------|-------------|
+| `@pytest.mark.integration` | Exige hardware real ou rede |
+| `@pytest.mark.requires_pipewire` | Exige PipeWire rodando |
+| `@pytest.mark.requires_wasapi` | Exige Windows + WASAPI |
+| `@pytest.mark.requires_display` | Exige sessão gráfica ativa |
+
+Atualmente **nenhum teste** exige esses marcadores — todos rodam em CI headless.
+
+---
+
+## Troubleshooting
+
+### PipeWire não está rodando
+
+```bash
+systemctl --user status pipewire pipewire-pulse
+# Se não estiver ativo:
+systemctl --user start pipewire pipewire-pulse
+systemctl --user enable pipewire pipewire-pulse
+```
+
+Se o problema persistir após logout/login:
+
+```bash
+sudo dnf reinstall pipewire pipewire-pulseaudio
+```
+
+### Dispositivo de monitor não aparece na lista
+
+1. Verifique se há um sink ativo: `pactl list sinks | grep -i state`
+2. Toque qualquer som (música, vídeo) — o monitor é criado automaticamente quando há saída.
+3. Rode o diagnóstico: `python3 scripts/diagnose_linux_audio.py`
+4. Reinicie o PipeWire: `systemctl --user restart pipewire`
+
+### Falta de permissões de áudio
+
+- **Flatpak**: o aplicativo precisa da permissão `org.freedesktop.portal.Flatpak.app.*` (não aplicável aqui — não usamos Flatpak).
+- **SELinux**: em raras configurações restritivas, o `pw-record` pode ser bloqueado. Verifique com `sudo ausearch -m AVC -ts recent | grep pw-record`.
+- **Root**: **não rode como root** — PipeWire roda no espaço do usuário. Use usuário comum logado na sessão gráfica.
+
+### Captura de tela bloqueada no Wayland
+
+Sintomas: frame preto, erro "Captura de tela não suportada em Wayland via mss".
+
+Soluções:
+
+1. **Fazer logout e entrar em sessão Xorg** (recomendado):
+   - GDM: na tela de login, clique na engrenagem e selecione "GNOME on Xorg".
+   - SDDM (KDE): selecione "Plasma (X11)".
+2. **Instalar `xdg-desktop-portal`** com o backend específico do DE:
+   ```bash
+   sudo dnf install xdg-desktop-portal xdg-desktop-portal-gnome
+   # ou para KDE: xdg-desktop-portal-kde
+   # ou para sway: xdg-desktop-portal-wlr
+   ```
+   > **Nota**: o suporte a `portal` para captura de tela ainda não está implementado no código (apenas detectado). A mensagem de erro orienta o fallback para X11.
+
+### Tesseract não encontrado
+
+```bash
+which tesseract
+# Se vazio:
+sudo dnf install tesseract tesseract-langpack-por tesseract-langpack-eng
+```
+
+Em Linux, **não** defina `TESSERACT_PATH` no `.env` — deixe vazio para usar do PATH. O Windows usa o caminho default `C:\Program Files\Tesseract-OCR\tesseract.exe`.
+
+### Modelo Whisper (STT) não carrega
+
+```bash
+# Verificar cache
+ls -la ~/.cache/gravador/audio/whisper/
+
+# Forçar re-download (apague o cache)
+rm -rf ~/.cache/gravador/audio/whisper/
+python3 scripts/setup_audio_models.py
+```
+
+Se o download falhar por rede, baixe manualmente de https://huggingface.co/Systran/faster-whisper-base e coloque em `~/.cache/gravador/audio/whisper/base/`.
+
+### PyAudio não instala no Windows
+
+```powershell
+pip install pipwin
+pipwin install pyaudio
+```
+
+Ou baixe o wheel pré-compilado de https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio.
 
 ---
 

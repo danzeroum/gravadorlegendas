@@ -77,10 +77,12 @@ def main():
     print(f"📍 Diretório de cache: {_ensure_dir()}")
     print("=" * 50)
 
-    download_whisper("tiny" if not args.all else "base")
     if args.all:
+        download_whisper("tiny")
         download_whisper("base")
         download_whisper("small")
+    else:
+        download_whisper(args.whisper)
 
     download_silero_vad()
 

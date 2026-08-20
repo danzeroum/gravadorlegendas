@@ -1,19 +1,26 @@
 """Orquestração principal do assistente de reunião.
 
 Gerencia o ciclo de vida da captura, processamento e
-atualização da interface.
+atualização da interface. A partir da migração Linux/Fedora, o
+``SessionManager`` respeita a plataforma:
+
+- Windows: pode usar Legendas ao Vivo do Windows (default) ou
+  transcrição local.
+- Linux: sempre usa transcrição local ou OCR de tela.
 """
+from __future__ import annotations
+
 import time
 import threading
 import structlog
 
 from src.config import settings
-from src.capture.screen_capture import ScreenCapture
-from src.capture.activate_windows_captions import activate_windows_captions
+from src.capture.screen_capture import ScreenCapture, ScreenCaptureError
 from src.ocr.engine import OCREngine
 from src.translation.marianmt import TranslatorMarianMT
 from src.storage.file_manager import FileManager
 from src.nlp.question_detector import QuestionDetector
+from src.platform.detection import detect_capabilities
 
 structlog.configure(
     processors=[
@@ -33,10 +40,6 @@ _logger = structlog.get_logger()
 class SessionManager:
     """Gerencia a sessão de captura e processamento.
 
-    Encapsula o loop de captura, tradução, detecção de
-    perguntas e notificação da UI. Substitui as variáveis
-    globais dos scripts originais.
-
     Attributes:
         capture: Instância de ScreenCapture.
         ocr: Instância de OCREngine.
@@ -49,6 +52,7 @@ class SessionManager:
     """
 
     def __init__(self):
+        self._caps = detect_capabilities()
         self.capture = ScreenCapture(settings.screen_region)
         self.ocr = OCREngine()
         self.translator = TranslatorMarianMT()
@@ -70,35 +74,32 @@ class SessionManager:
 
     @property
     def is_running(self) -> bool:
-        """Indica se a captura está em andamento."""
         return self._is_running
 
     @property
     def current_file(self) -> str:
-        """Caminho do arquivo sendo gravado atualmente."""
         return self._current_file
 
     @property
     def context(self) -> str:
-        """Contexto da reunião definido pelo usuário."""
         return self._context
 
     @context.setter
     def context(self, value: str):
-        """Define o contexto da reunião."""
         self._context = value
 
-    def feed_audio_caption(self, caption: str):
-        """Alimenta o session manager com transcrição de áudio com falantes.
+    @property
+    def capabilities(self):
+        """Expõe as capacidades detectadas para a UI."""
+        return self._caps
 
-        O texto fica disponível para resumos e respostas via get_full_text().
-        """
+    def feed_audio_caption(self, caption: str):
+        """Alimenta o session manager com transcrição de áudio com falantes."""
         if caption:
             self._audio_captions.append(caption)
 
     @property
     def last_question(self) -> str:
-        """Última pergunta detectada pelo QuestionDetector."""
         return self._last_question
 
     def start(self, prefix: str, activate_captions: bool = True) -> str:
@@ -106,7 +107,8 @@ class SessionManager:
 
         Args:
             prefix: Prefixo para nomear o arquivo de saída.
-            activate_captions: Se True, ativa legendas do Windows.
+            activate_captions: Se True, ativa legendas do Windows
+                (apenas em Windows; em Linux é ignorado com aviso).
 
         Returns:
             Mensagem de status indicando resultado.
@@ -120,28 +122,34 @@ class SessionManager:
         self._captured_texts.clear()
         self._is_running = True
 
-        if activate_captions:
-            activate_windows_captions()
+        # Ativa Legendas ao Vivo do Windows apenas em Windows.
+        if activate_captions and self._caps.supports_windows_live_captions:
+            try:
+                from src.capture.activate_windows_captions import (
+                    activate_windows_captions,
+                )
+                activate_windows_captions()
+            except Exception as e:
+                _logger.warning(
+                    "activate_windows_captions_failed", error=str(e)
+                )
+        elif activate_captions and not self._caps.supports_windows_live_captions:
+            _logger.info(
+                "activate_captions_ignored_on_linux",
+                reason="Legendas do Windows não disponíveis nesta plataforma",
+            )
 
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
         return f"Gravando em: {self._current_file}"
 
     def stop(self) -> str:
-        """Para a captura de legendas.
-
-        Returns:
-            Mensagem de confirmação.
-        """
+        """Para a captura de legendas."""
         self._is_running = False
         return "Gravação parada."
 
     def get_full_text(self) -> str:
-        """Retorna todo o texto capturado (OCR + áudio) até o momento.
-
-        Returns:
-            Conteúdo completo incluindo OCR e transcrição de áudio.
-        """
+        """Retorna todo o texto capturado (OCR + áudio) até o momento."""
         parts = []
         if self._current_file:
             try:
@@ -156,7 +164,11 @@ class SessionManager:
         return "\n\n".join(parts)
 
     def _capture_loop(self):
-        """Loop principal de captura (executado em thread separada)."""
+        """Loop principal de captura (executado em thread separada).
+
+        Em Wayland sem portal, captura de tela falha — o loop registra
+        erro e aguarda o usuário mudar de sessão. Não derruba a aplicação.
+        """
         lang_map = {"eng": "eng", "por": "por", "spa": "spa"}
         ocr_lang = lang_map.get(settings.ocr_language, settings.ocr_language)
 
@@ -182,14 +194,15 @@ class SessionManager:
                         if self.on_question:
                             self.on_question(text)
 
+            except ScreenCaptureError as e:
+                # Wayland sem portal — não tentar capturar repetidamente.
+                _logger.error("screen_capture_unavailable", error=str(e))
+                if self.on_question:
+                    # Reutiliza o canal de notificação para avisar a UI.
+                    self.on_question(f"[Captura de tela indisponível: {e}]")
+                # Aguarda antes de tentar de novo (evita loop apertado).
+                time.sleep(5)
             except Exception as e:
                 _logger.error("capture_loop_error", error=str(e))
 
             time.sleep(1)
-
-
-if __name__ == "__main__":
-    from src.ui.app import MainWindow
-
-    app = MainWindow()
-    app.run()

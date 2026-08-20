@@ -13,14 +13,32 @@ pip-log.txt
 # Environments
 .env
 .env.*
-!.env.example  # mantém o exemplo, ignora os demais
+# Mantém o exemplo como contrato de configuração, ignora os demais
+!.env.example
 
 # Coverage
 .coverage
 coverage/
+.pytest_cache/
 
-# Data
+# Data — gerado pelo app (logs, recordings, config.json, modelos baixados)
 data/
+
+# Artefatos de validação — logs sanitizados, hashes, evidências E2E
+# Mantemos o diretório via .gitkeep, mas o conteúdo é local e sensível
+# (pode conter trechos de transcrição ou metadados de dispositivos).
+artifacts/
+!artifacts/validation/
+artifacts/validation/*
+!artifacts/validation/.gitkeep
+
+# Modelos de IA baixados pelo app — nunca versionar (binários grandes)
+models/
+*.gguf
+*.bin
+*.onnx
+*.pt
+*.pth
 
 # Docker
 docker/
@@ -35,3 +53,12 @@ docker/
 # OS
 .DS_Store
 Thumbs.db
+
+# Manifests e checksums locais (gerados no build do ZIP)
+# MANIFEST.sha256 é commitado explicitamente quando gerado
+# (não ignore aqui — é parte do entregável)
+
+# Artefatos de build (pip editable)
+*.egg-info/
+build/
+dist/

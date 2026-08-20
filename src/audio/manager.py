@@ -16,6 +16,7 @@ from src.audio.buffer import CircularAudioBuffer
 from src.audio.transcribe import TranscriberProcess
 from src.audio.diarize import DiarizationProcess
 from src.audio.metrics import LatencyTracker, OverlapCounter
+from src.config import settings
 
 
 _SPEAKER_MERGE_TOLERANCE = 0.3
@@ -62,12 +63,14 @@ class AudioManager:
     def is_running(self) -> bool:
         return self._is_running
 
-    def start(self, device_index: int | None = None,
+    def start(self, device_index: int | str | None = None,
               enable_diarization: bool = True):
         """Inicia captura, transcrição e opcionalmente diarização.
 
         Args:
-            device_index: Índice do dispositivo WASAPI (None = auto).
+            device_index: Identificador do dispositivo. Em Windows, é o
+                índice WASAPI (int). Em Linux, é o ID numérico ou nome
+                do source PipeWire (str). None = auto-detect.
             enable_diarization: Se True, inicia diarização em tempo real.
         """
         if self._is_running:
@@ -81,7 +84,15 @@ class AudioManager:
             self.capture.device_index = device_index
 
         self._transcriber = TranscriberProcess(
-            self._audio_queue, self._transcript_queue
+            self._audio_queue,
+            self._transcript_queue,
+            model_size=settings.stt_model,
+            chunk_duration=settings.stt_chunk_duration,
+            language=settings.stt_language,
+            task=settings.stt_task,
+            beam_size=settings.stt_beam_size,
+            temperature=settings.stt_temperature,
+            vad_filter=settings.stt_vad_filter,
         )
         self._transcriber.start()
 
