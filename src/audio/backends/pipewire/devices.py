@@ -25,7 +25,7 @@ _SOURCE_BLOCK_RE = re.compile(
     re.MULTILINE,
 )
 
-_PROP_RE = re.compile(r"^\s*(?P<k>[\w\.\-]+)\s*[:=]\s*(?P<v>.*?)\s*$")
+_PROP_RE = re.compile(r"^\s*(?P<k>[\w\.\-\s]+?)\s*[:=]\s*(?P<v>.*?)\s*$")
 
 
 def _have_pactl() -> bool:
@@ -57,13 +57,24 @@ def _run_pactl_list(kind: str) -> str:
 
 
 def _parse_devices(text: str, kind: str) -> list[AudioDevice]:
-    """Extrai dispositivos de blocos `Source #N` ou `Sink #N`."""
+    """Extrai dispositivos de blocos `Source #N` ou `Sink #N`.
+
+    Args:
+        text: Saída de ``pactl list <kind>`` (sources | sinks).
+        kind: "sources" ou "sinks" — usado apenas para distinguir monitor
+            de input/output.
+    """
     devices: list[AudioDevice] = []
     if not text:
         return devices
 
+    # ``pactl`` emite blocos iniciados por "Source #N" ou "Sink #N"
+    # (singular, sem "s" final). kind pode ser "sources" ou "sinks".
+    block_keyword = kind[:-1] if kind.endswith("s") else kind  # "Source" / "Sink"
+    block_keyword_cap = block_keyword.capitalize()
+
     blocks = re.findall(
-        r"^" + kind.capitalize() + r" #(\d+)\s*\n(.*?)(?=^" + kind.capitalize() + r" #|\Z)",
+        r"^" + block_keyword_cap + r" #(\d+)\s*\n(.*?)(?=^" + block_keyword_cap + r" #|\Z)",
         text,
         re.MULTILINE | re.DOTALL,
     )
