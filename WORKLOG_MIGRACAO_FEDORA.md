@@ -170,3 +170,79 @@ c24029a feat(platform): adiciona camada de abstração de plataforma e backends 
 ```
 
 3 commits coesos na branch de feature, sem commits diretos na main.
+
+---
+
+## Validação real Fedora desktop (2026-08-20) — branch `feat/linux-fedora-support`
+
+Sessão: Fedora 44, Wayland/GNOME, PipeWire 1.6.8, Python 3.12.14 (mise),
+Whisper `base` em cache, Tesseract eng+por, espeak-ng 1.52.0.
+
+### Fase 1 — Infraestrutura PipeWire e shutdown
+
+- `pactl` do subprocesso emitia `Fonte #N`/`Estado:` (locale pt_BR) → parser
+  retornava `[]`. Fix: `_pactl_env()` força locale C. Regressão:
+  `test_run_pactl_list_forces_c_locale`.
+- Monitor idle entregava NaN/Inf → `RuntimeWarning` e cast f32→s16 indefinido.
+  Fix: `np.nan_to_num`. Regressão: `test_pump_stdout_sanitizes_nan_inf`.
+- start/stop sem leitura bloqueava o feeder da `multiprocessing.Queue` (pipe
+  cheio) → processo Python não encerrava. Fix: `stop()` drena a fila
+  (`_drain_queue`). Regressão: `test_drain_queue_empties_pending_data` + repro
+  5 ciclos rc=0.
+- `TranscriberProcess` não encerrava: pai multi-threaded + `fork()` deadlockava
+  o filho. Fix: start method `spawn` em `transcribe.py`. Regressão:
+  `test_transcriber_process_lifecycle`.
+- `pip install -e` falhava (build-backend inválido). Fix: `setuptools.build_meta`
+  no `pyproject.toml`.
+- Cache do modelo Whisper em caminho divergente + `--whisper` ignorado no setup.
+  Fix: cache unificado em `~/.cache/gravador/audio/whisper/` e flag honrada.
+
+Commit: `70d2f77`, `1a62d28`, `2efdbe4`, `189225c`.
+
+### Fase 2 — Qualidade STT (critério ≥2 termos)
+
+Problema: com `chunk_duration=1.0`, o Whisper fragmentava a frase e alucinava
+(`PESK e descreve-se.`, `e o que é o que é...`). A transcrição do arquivo
+completo era perfeita (`Teste de transcrição local no Fedora.`), mas o
+pipeline em lotes de 1s destruía a fidelidade.
+
+Experimentos (`artifacts/validation/stt_experiments/`):
+- Voz espeak-ng `pt-br` s=90 (lenta) + `beam_size=1`, `temperature=0.0`,
+  `vad_filter=False`, `language=pt`, `task=transcribe` → 4/4 termos em
+  transcrição direta de arquivo.
+- Janelas de chunk no áudio real capturado: 3s → 0 termos; 4-6s → 2-3 termos;
+  **7s → 4/4 termos** (`Teste de transcrição local do fedora.`).
+- `vad_filter=True` elimina o loop de alucinação no silêncio sem descartar a
+  frase (3 termos).
+
+Decisão aplicada em `src/audio/transcribe.py` e `src/config.py`:
+`chunk_duration=7.0` (default), `beam_size=1`, `temperature=0.0`,
+`language="pt"`, `task="transcribe"`, `vad_filter=True`; settings
+`STT_CHUNK_DURATION`, `STT_LANGUAGE`, `STT_TASK`, `STT_BEAM_SIZE`,
+`STT_TEMPERATURE`, `STT_VAD_FILTER` conectadas ao `AudioManager`.
+
+Teste de qualidade real (`tests/integration/test_e2e_stt_quality_real.py`):
+gera a frase com espeak-ng, reproduz em **sink virtual isolado**
+(`module-null-sink` — evita misturar com áudio ambiente), captura o monitor
+com o pipeline real do app e exige **≥2 termos** em {teste, transcrição,
+local, fedora}. Resultado: **`Teste de transcrição local do fedlota.`**
+(3 termos), 0 `pw-record` órfãos.
+
+Commit: `b0fca0c`, `5c1dd2d`.
+
+### Fase 3 — Estado final
+
+- Unit: 155 passed + flake8 limpo.
+- Integração real: **20 passed, 5 skipped** (rc=0).
+- E2E-01..10 PASSED; E2E-11 OCR X11 `NOT_EXECUTED_WAYLAND_SESSION`;
+  E2E-12..15 PASSED.
+- `MANIFEST.sha256` validável (`sha256sum -c` 100% OK, sem self-hash).
+- ZIP final: `gravadorlegendas-fedora-multiplatform-20260820-verified.zip`
+  (raiz única `gravadorlegendas/`, sem `.git/`, `.venv/`, `artifacts/`, logs).
+- ZIP candidato original permanece intacto (backup; fonte canônica é o GitHub:
+  `https://github.com/danzeroum/gravadorlegendas.git`).
+
+Commits finais na branch (da base `3a3497d`): `c24029a`, `b634e1b`, `13dcc0b`,
+`aa880ce`, `189225c`, `2efdbe4`, `347d476`, `70d2f77`, `1a62d28`, `0beb169`,
+`859d2c3`, `fc84953`, `c5b231f`, `e37f8a0`, `b0fca0c`, `5c1dd2d`,
+`docs(validation): finaliza manifesto e status Fedora`.

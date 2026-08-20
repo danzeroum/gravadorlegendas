@@ -2,8 +2,12 @@
 
 **Data de atualização:** 2026-08-20
 **Branch:** `feat/linux-fedora-support`
-**Commit HEAD (conteúdo validado):** `b0fca0c`
-**Status global:** ✅ **PASSED — infraestrutura e qualidade STT aprovadas**
+**Commit HEAD (conteúdo validado):** `5c1dd2d`
+**Status global:** ✅ **FEDORA_FUNCTIONALLY_VALIDATED**
+
+> **Estados objetivos usados neste documento**: `PASSED`, `FAILED`,
+> `NOT_EXECUTED`, `SKIPPED_MISSING_PREREQUISITE`. OCR em X11 é marcado
+> `NOT_EXECUTED_WAYLAND_SESSION` (a sessão de validação é Wayland).
 
 ---
 
@@ -101,21 +105,21 @@ conter **pelo menos 2 termos** entre: `teste`, `transcrição`, `local`, `fedora
 
 | ID | Cenário | Status | Como foi validado |
 |----|---------|--------|-------------------|
-| E2E-01 | Instalação limpa Fedora | ✅ PASSED | clone, venv 3.12, `pip install -e ".[linux,audio,dev]"`, tkinter/Tk 9.0 |
-| E2E-02 | Inicialização da aplicação | ✅ PASSED | `test_wayland_app_does_not_crash_on_init` (SessionManager/App init) |
-| E2E-03 | Detecção PipeWire | ✅ PASSED | `test_e2e_03_pipewire_socket_exists` (socket `$XDG_RUNTIME_DIR/pipewire-0`) |
-| E2E-04 | Detecção de microfone | ✅ PASSED | `test_e2e_04_microphone_detection` (source 51 real) |
-| E2E-05 | Detecção de áudio do sistema | ✅ PASSED | `test_e2e_05_monitor_detection` (source 50 real) |
-| E2E-06 | Captura de microfone | ✅ PASSED | captura técnica OK (`test_e2e_06_microphone_capture` passa); voz do mic interno inaudível é limitação de hardware — qualidade STT validada via áudio de sistema controlado |
-| E2E-07 | Captura do sistema | ✅ PASSED | `test_e2e_07_stt_quality_system_audio` (sink virtual isolado): transcrição `Teste de transcrição local do fedlota.` = **3 termos ≥ 2** |
-| E2E-08 | Start/stop repetido | ✅ PASSED | `test_e2e_08_repeated_start_stop` + repro 5 ciclos (rc=0, 0 órfãos) |
-| E2E-09 | Transcrição local | ✅ PASSED | frase `teste de transcrição local no Fedora` (espeak-ng pt-br s90) tocada no sink e capturada no monitor; transcrição com **3+ termos obrigatórios** |
-| E2E-10 | Pipeline completo | ✅ PASSED | `PipewireCapture` → `TranscriberProcess` (chunk 7s, VAD on) → texto `Teste de transcrição local do fedlota.` (3 termos), rc=0, 0 órfãos |
-| E2E-11 | OCR em X11 | ⏳ N/A Wayland | 4 testes `requires_x11` skip (sessão não é X11) |
-| E2E-12 | Wayland | ✅ PASSED | app inicia, `ScreenCaptureError` clara ("Use sessão X11 ou xdg-desktop-portal"), banner Wayland |
-| E2E-13 | Seleção de dispositivo | ✅ PASSED | `test_e2e_13_device_selection` (2 dispositivos reais) |
-| E2E-14 | Ausência de PipeWire | ✅ PASSED | `test_e2e_14_no_pipewire_graceful_failure` (unitário com mock) |
-| E2E-15 | Regressão Windows isolada | ✅ PASSED | `test_e2e_15_wasapi_never_on_linux` (unitário) |
+| E2E-01 | Instalação limpa Fedora | PASSED | clone, venv 3.12, `pip install -e ".[linux,audio,dev]"`, tkinter/Tk 9.0 |
+| E2E-02 | Inicialização da aplicação | PASSED | `test_wayland_app_does_not_crash_on_init` (SessionManager/App init) |
+| E2E-03 | Detecção PipeWire | PASSED | `test_e2e_03_pipewire_socket_exists` (socket `$XDG_RUNTIME_DIR/pipewire-0`) |
+| E2E-04 | Detecção de microfone | PASSED | `test_e2e_04_microphone_detection` (source 51 real) |
+| E2E-05 | Detecção de áudio do sistema | PASSED | `test_e2e_05_monitor_detection` (source 50 real) |
+| E2E-06 | Captura de microfone | PASSED | captura técnica OK (`test_e2e_06_microphone_capture` passa); voz do mic interno inaudível é limitação de hardware — qualidade STT validada via áudio de sistema controlado |
+| E2E-07 | Captura do sistema | PASSED | `test_e2e_07_stt_quality_system_audio` (sink virtual isolado): transcrição `Teste de transcrição local do fedlota.` = **3 termos ≥ 2** |
+| E2E-08 | Start/stop repetido | PASSED | `test_e2e_08_repeated_start_stop` + repro 5 ciclos (rc=0, 0 órfãos) |
+| E2E-09 | Transcrição local | PASSED | frase `teste de transcrição local no Fedora` (espeak-ng pt-br s90) tocada no sink e capturada no monitor; transcrição com **3+ termos obrigatórios** |
+| E2E-10 | Pipeline completo | PASSED | `PipewireCapture` → `TranscriberProcess` (chunk 7s, VAD on) → texto `Teste de transcrição local do fedlota.` (3 termos), rc=0, 0 órfãos |
+| E2E-11 | OCR em X11 | NOT_EXECUTED_WAYLAND_SESSION | 4 testes `requires_x11` skip (sessão de validação é Wayland); **não** declarado validado |
+| E2E-12 | Wayland | PASSED | app inicia, `ScreenCaptureError` clara ("Use sessão X11 ou xdg-desktop-portal"), banner Wayland |
+| E2E-13 | Seleção de dispositivo | PASSED | `test_e2e_13_device_selection` (2 dispositivos reais) |
+| E2E-14 | Ausência de PipeWire | PASSED | `test_e2e_14_no_pipewire_graceful_failure` (unitário com mock) |
+| E2E-15 | Regressão Windows isolada | PASSED | `test_e2e_15_wasapi_never_on_linux` (unitário) |
 
 ---
 
@@ -150,16 +154,31 @@ conter **pelo menos 2 termos** entre: `teste`, `transcrição`, `local`, `fedora
 
 | # | Regra | Status |
 |---|-------|--------|
-| 1 | Testes unitários e lint passam | ✅ Sim (155 + flake8 limpo) |
-| 2 | E2E-01 até E2E-10 passam em Fedora desktop | ✅ Sim (todos PASSED; E2E-06/07/09/10 via áudio de sistema controlado) |
-| 3 | E2E-12 (Wayland) documentado e seguro | ✅ Sim (3 testes passaram; fallback claro) |
-| 4 | Sem processos `pw-record` órfãos | ✅ Sim (0 órfãos após todas as suítes, repro 5 ciclos e E2E de áudio de sistema) |
-| 5 | Transcrição local validada com áudio real | ✅ **SIM** — áudio de sistema controlado (fixture espeak pt-br no sink) → `Teste de transcrição local do fedlota.` = 3/4 termos obrigatórios |
-| 6 | Limitações explícitas no README e relatório | ✅ Sim |
+| 1 | Testes unitários e lint passam | PASSED (155 + flake8 limpo) |
+| 2 | E2E-01 até E2E-10 passam em Fedora desktop | PASSED (todos; E2E-06/07/09/10 via áudio de sistema controlado) |
+| 3 | E2E-12 (Wayland) documentado e seguro | PASSED (3 testes; fallback claro) |
+| 4 | Sem processos `pw-record` órfãos | PASSED (0 órfãos após todas as suítes, repro 5 ciclos e E2E de áudio de sistema) |
+| 5 | Transcrição local validada com áudio real | PASSED — áudio de sistema controlado (fixture espeak pt-br no sink) → `Teste de transcrição local do fedlota.` = 3/4 termos obrigatórios |
+| 6 | Limitações explícitas no README e relatório | PASSED |
 
-**Conclusão**: todas as regras obrigatórias estão **atendidas**. A transcrição
-de áudio de sistema controlado é semanticamente reconhecível e o pacote pode
-ser gerado como `-verified`.
+**Conclusão**: todas as regras obrigatórias estão **PASSED**. A transcrição
+de áudio de sistema controlado é semanticamente reconhecível.
+
+### Condições para `FEDORA_FUNCTIONALLY_VALIDATED` — verificação
+
+| # | Condição | Status |
+|---|----------|--------|
+| 1 | Unitários e lint passaram | PASSED (155 + flake8) |
+| 2 | PipeWire real passou | PASSED (suíte `requires_pipewire` 10 + e2e_07 isolado) |
+| 3 | Microfone/sistema capturados conforme aplicável | PASSED (sources 50/51 reais; mic voz limitada por hardware, captura OK) |
+| 4 | Ciclo start/stop sem `pw-record` órfão | PASSED (0 órfãos) |
+| 5 | Transcrição do áudio controlado ≥ 2 termos de {teste, transcrição, local, fedora} | PASSED (3/4) |
+| 6 | UI abriu em Wayland sem crash | PASSED |
+| 7 | Wayland com fallback seguro e explícito para OCR sem portal | PASSED |
+| 8 | `auto` selecionou PipeWire e `local_stt` no Linux | PASSED (testes de seleção) |
+| 9 | WASAPI/Legendas do Windows não selecionados/exibidos no Fedora | PASSED |
+
+**Status global: `FEDORA_FUNCTIONALLY_VALIDATED`.**
 
 ---
 
@@ -204,6 +223,10 @@ A transcrição por voz humana do microfone interno desta máquina é limitada
 por hardware (zumbido de fan/coil ~800Hz domina o sinal); a validação de
 qualidade STT foi feita por áudio de sistema controlado (fixture PT no sink
 PipeWire).
+
+**Pendências remanescentes declaradas**: OCR em X11 = `NOT_EXECUTED_WAYLAND_SESSION`
+(não validado nesta sessão); captura de tela em Wayland usa apenas fallback
+seguro (portal não implementado).
 
 Nenhum commit foi feito na `main`; todos estão na branch
 `feat/linux-fedora-support`.

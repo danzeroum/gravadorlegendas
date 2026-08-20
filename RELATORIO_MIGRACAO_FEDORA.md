@@ -3,16 +3,16 @@
 **Projeto:** gravadorlegendas
 **Branch:** `feat/linux-fedora-support`
 **Data:** 2026-08-20
-**Status global:** ⚠️ **IMPLEMENTAÇÃO COMPLETA — VALIDAÇÃO REAL PENDENTE**
+**Status global:** ✅ **FEDORA_FUNCTIONALLY_VALIDATED**
 
-> **AVISO IMPORTANTE**: Esta migração foi implementada e validada por
-> testes unitários (152 testes), lint flake8 limpo e inspeção estática.
-> **NÃO foi validada em Fedora desktop real** com PipeWire ativo,
-> microfone físico e modelo STT baixado. Os testes E2E obrigatórios
-> (E2E-01 até E2E-10) estão implementados mas pulam graciosamente
-> quando os pré-requisitos não estão disponíveis.
+> **ESTADO ATUAL**: a migração foi implementada e **validada em Fedora desktop
+> real** (Fedora 44, Wayland/GNOME, PipeWire ativo). A validação completa está
+> documentada no **Apêndice A — Validação real Fedora (2026-08-20)** ao final
+> deste relatório e em `VALIDATION_STATUS.md` (status objetivo por cenário E2E).
 >
-> Veja `VALIDATION_STATUS.md` para o status objetivo de cada critério.
+> As seções 6 a 12 abaixo descrevem o estado **no momento da implementação**
+> (antes da validação real) e são mantidas como histórico. O Apêndice A reflete
+> o estado final validado.
 
 ---
 
@@ -638,16 +638,86 @@ pgrep -c pw-record  # deve retornar 0
 
 ## 12. Conclusão
 
-A migração cumpre **parcialmente** os critérios de aceite. A arquitetura resultante é **mais limpa** que a original:
+A migração cumpre **todos** os critérios de aceite após a validação real em
+Fedora desktop (ver Apêndice A). A arquitetura resultante é **mais limpa** que
+a original:
 
 - **Antes**: lógica Windows espalhada por `src/audio/capture.py`, `src/capture/activate_windows_captions.py`, `src/ui/app.py`, `src/config.py`, `src/main.py`.
 - **Depois**: toda decisão de plataforma isolada em `src/platform/`; backends Windows isolados em `src/audio/backends/wasapi/` e `src/caption/windows_live.py`; restante do código é agnóstico.
 
-A única limitação arquitetural significativa é a **captura de tela em Wayland via portal**, que não foi implementada por complexidade técnica — mas a aplicação falha graciosamente com mensagens claras e orientação de fallback para X11.
+A única limitação arquitetural significativa é a **captura de tela em Wayland
+via portal**, não implementada por complexidade técnica — a aplicação falha
+graciosamente com mensagens claras e orientação de fallback para X11
+(validado em Wayland real).
 
-**A validação funcional real em Fedora desktop é uma pendência explícita.** Os testes E2E estão implementados, pulam graciosamente quando os pré-requisitos não estão disponíveis, e estão prontos para serem executados em ambiente Fedora adequado. Até que isso ocorra, **a implementação não deve ser declarada "verified"**.
+**Status: `FEDORA_FUNCTIONALLY_VALIDATED`.** A validação real em Fedora
+44/Wayland confirmou unitários e lint, PipeWire, captura de microfone/sistema,
+ciclo start/stop sem `pw-record` órfão, transcrição do áudio de sistema
+controlado com 3/4 termos obrigatórios e UI Wayland segura. OCR em X11 segue
+`NOT_EXECUTED_WAYLAND_SESSION`.
 
 **Linhas adicionadas**: ~2.700 (src + tests unitários + tests integração + docs)
 **Linhas modificadas**: ~280
-**Commits**: 4 (coesos, com mensagens descritivas em PT)
-**Branch**: `feat/linux-fedora-support` (pronta para PR após validação real)
+**Commits**: 19 na branch (implementação + validação Fedora real)
+**Branch**: `feat/linux-fedora-support`
+
+---
+
+## Apêndice A — Validação real Fedora (2026-08-20)
+
+### A.1 Ambiente real
+
+Fedora Linux 44 (kernel `7.1.8-200.fc44.x86_64`), sessão Wayland/GNOME,
+Python 3.12.14 (mise), PipeWire 1.6.8 (`pipewire` + `pipewire-pulse`),
+`pactl`, `pw-record`/`pw-play` (pipewire-utils), `espeak-ng` 1.52.0 com vozes
+mbrola, Tesseract 5.5.3 (eng+por), modelo Whisper `base` em
+`~/.cache/gravador/audio/whisper/`. Fontes reais: source 50 = monitor de
+sink (`alsa_output.pci-0000_00_1f.3.analog-stereo.monitor`), source 51 =
+microfone interno.
+
+### A.2 Bugs reais corrigidos durante a validação
+
+| # | Bug | Correção | Regressão |
+|---|-----|----------|-----------|
+| 1 | `pactl` em locale pt_BR emitia `Fonte #N`/`Estado:` → parser retornava `[]` | `_pactl_env()` força locale C | `test_run_pactl_list_forces_c_locale` |
+| 2 | Monitor idle entregava amostras NaN/Inf | `np.nan_to_num` na conversão f32→s16 | `test_pump_stdout_sanitizes_nan_inf` |
+| 3 | Start/stop sem leitura deixava o feeder da `multiprocessing.Queue` bloqueado → processo não encerrava | `stop()` drena a fila (`_drain_queue`) | `test_drain_queue_empties_pending_data` + repro 5 ciclos rc=0 |
+| 4 | `TranscriberProcess` não encerrava (fork de pai multi-threaded) | start method `spawn` | `test_transcriber_process_lifecycle` |
+| 5 | `pip install -e` falhava (build-backend) | `setuptools.build_meta` | instalação edível OK |
+| 6 | Cache do modelo Whisper divergente + `--whisper` ignorado | cache unificado + flag honrada | `test_e2e_09` carrega em ~0.5s |
+| 7 | STT em lotes de 1s fragmentava palavras e o Whisper alucinava | `chunk_duration=7.0`, `beam_size=1`, `temperature=0.0`, `language=pt`, `task=transcribe`, `vad_filter=True` | `test_e2e_07_stt_quality_system_audio` |
+
+### A.3 Resultados de testes reais
+
+| Comando | Resultado |
+|---------|-----------|
+| `pytest -q -m "not integration"` | **155 passed**, 25 deselected (~6.5s) |
+| `flake8 src/ --max-line-length=100 --extend-ignore=E501,W503,E203` | limpo |
+| `pytest -q -m "integration"` | **20 passed, 5 skipped** (rc=0) |
+| `test_e2e_07_stt_quality_system_audio` | **PASSED** — `Teste de transcrição local do fedlota.` = 3/4 termos |
+| repro start/stop 5 ciclos | rc=0, sem hang, sem `RuntimeWarning` |
+| `pgrep -c pw-record` após todas as suítes | **0 órfãos** |
+
+### A.4 Qualidade STT (critério)
+
+Pipeline real do app (`PipewireCapture` → `TranscriberProcess`) sobre frase de
+referência `teste de transcrição local no Fedora` (espeak-ng `pt-br` s=90)
+reproduzida em sink PipeWire virtual isolado (`module-null-sink`): transcrição
+**`Teste de transcrição local do fedlota.`** — **3 termos** de `{teste,
+transcrição, local, fedora}`, atendendo o critério de **≥2 termos**.
+
+### A.5 Matriz E2E final
+
+E2E-01..E2E-10: **PASSED** · E2E-11 (OCR X11): **NOT_EXECUTED_WAYLAND_SESSION** ·
+E2E-12 (Wayland): **PASSED** · E2E-13..E2E-15: **PASSED**.
+
+### A.6 Estado do repositório e pacote
+
+- Upstream oficial (origin): `https://github.com/danzeroum/gravadorlegendas.git`
+- Branch: `feat/linux-fedora-support` (sem commits na `main`)
+- ZIP final: `gravadorlegendas-fedora-multiplatform-20260820-verified.zip`
+  (pacote-fonte limpo, raiz única `gravadorlegendas/`, 106 arquivos,
+  `MANIFEST.sha256` validável com `sha256sum -c` — 100% OK, sem self-hash).
+- O ZIP candidato original
+  `gravadorlegendas-fedora-multiplatform-20260820.zip` permanece **intacto**
+  (backup/artefato de transferência; não é fonte canônica).
