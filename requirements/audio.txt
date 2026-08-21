@@ -15,6 +15,13 @@ silero-vad>=4.0.0
 SoundFile>=0.12.0
 numpy>=1.24.0
 
+# --- Frente C (curto prazo): RNNoise — supressão de ruído em tempo real ---
+# O filtro funciona com fallback espectral se nenhum binding estiver instalado,
+# mas a qualidade é significativamente melhor com RNNoise nativo.
+# Descomente um dos bindings abaixo para usar RNNoise real:
+# pyrnnoise>=0.0.1
+# rnnoise-wrapper>=0.0.1
+
 # --- Diarização (opcional) ---
 # Instalar separadamente com: pip install diart pyannote.audio
 # Requer token Hugging Face: https://hf.co/settings/tokens
