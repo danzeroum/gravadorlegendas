@@ -89,9 +89,10 @@ def detect_display_scale() -> float:
 
 # --- Escala base Linux/Wayland --------------------------------------------
 # Aplicacoes X11 via XWayland nao sao escaladas pelo compositor. Sem ajuste,
-# fontes e widgets ficam minusculos em telas HiDPI. As constantes abaixo sao
-# multiplicadas por essa escala base; o usuario pode ajustar via
-# Configuracoes -> Aparanca (requer reinicio) ou APP_WIDGET_SCALING env.
+# fontes e widgets ficam minusculos em telas HiDPI.
+# A escala total = display_scale * ui_scaling (limitada a MAX_WIDGET_SCALING).
+# O usuario pode ajustar via Configuracoes -> Aparencia (requer reinicio)
+# ou APP_WIDGET_SCALING env.
 if sys.platform.startswith("linux"):
     try:
         _env_scale = float(os.environ.get(WIDGET_SCALING_ENV, ""))
@@ -111,29 +112,26 @@ if sys.platform.startswith("linux"):
 else:
     _LINUX_SCALE = 1.0
 
-# --- Tipografia -----------------------------------------------------------
-# "Sans Serif"/"Monospace" são famílias genéricas que o Tk resolve via
-# fontconfig no Fedora — não dependem de uma fonte empacotada (ex.: Inter).
-# Tamanhos aumentados para legibilidade em telas modernas (HiDPI / Wayland).
+# --- Tipografia (valores base, o customtkinter escala via widget_scaling) ---
 FONT_FAMILY = "Sans Serif"
 FONT_FAMILY_MONO = "Monospace"
 
-FONT_TITLE_SIZE = int(26 * _LINUX_SCALE)
-FONT_HEADING_SIZE = int(22 * _LINUX_SCALE)
-FONT_BODY_SIZE = int(18 * _LINUX_SCALE)
-FONT_LABEL_SIZE = int(16 * _LINUX_SCALE)
-FONT_BUTTON_SIZE = int(16 * _LINUX_SCALE)
+FONT_TITLE_SIZE = 26
+FONT_HEADING_SIZE = 22
+FONT_BODY_SIZE = 18
+FONT_LABEL_SIZE = 16
+FONT_BUTTON_SIZE = 16
 
-# --- Dimensões ---
-BUTTON_HEIGHT = int(44 * _LINUX_SCALE)
-BUTTON_HEIGHT_PRIMARY = int(48 * _LINUX_SCALE)
-BUTTON_WIDTH_SMALL = int(96 * _LINUX_SCALE)
+# --- Dimensões (valores base) ---
+BUTTON_HEIGHT = 44
+BUTTON_HEIGHT_PRIMARY = 48
+BUTTON_WIDTH_SMALL = 96
 
-PAD_SM = int(10 * _LINUX_SCALE)
-PAD_MD = int(14 * _LINUX_SCALE)
-PAD_LG = int(24 * _LINUX_SCALE)
+PAD_SM = 10
+PAD_MD = 14
+PAD_LG = 20
 
-RESULTS_PANEL_WIDTH = int(460 * _LINUX_SCALE)
+RESULTS_PANEL_WIDTH = 420
 
 # Opções exibidas no seletor de escala (rótulo → fator)
 SCALING_OPTIONS: dict[str, float] = {
@@ -147,6 +145,53 @@ SCALING_OPTIONS: dict[str, float] = {
     "250%": 2.5,
     "300%": 3.0,
 }
+
+
+def detect_display_scale() -> float:
+    """Detecta a escala do display no Linux via Xft.dpi ou gsettings.
+
+    Em Wayland/HiDPI, Xft.dpi reflete o produto entre escala de display e
+    fator de texto (ex.: 96 * 2.0 * 1.21 = 232). Retorna 1.0 em Windows,
+    macOS ou se a detecção falhar.
+
+    XWayland costuma reportar 96 DPI mesmo em telas 2x, então quando Xft.dpi
+    é 96 (ou inexistente) usamos 2.0 como fallback para garantir legibilidade.
+    """
+    if not sys.platform.startswith("linux"):
+        return 1.0
+
+    # 1. Xft.dpi via xrdb (presente na maioria dos desktops X11/Wayland)
+    try:
+        result = subprocess.run(
+            ["xrdb", "-query"],
+            capture_output=True, text=True, timeout=2, check=False,
+        )
+        for line in result.stdout.splitlines():
+            if "xft.dpi" in line.lower():
+                parts = line.split(":", 1)
+                if len(parts) == 2:
+                    dpi = _to_float(parts[1].strip())
+                    if dpi and dpi > 96:
+                        # DPI real > 96 (ex.: 116, 192, 232)
+                        return max(1.0, dpi / 96.0)
+    except Exception:
+        pass
+
+    # 2. Fallback: gsettings do GNOME (text-scaling-factor)
+    try:
+        result = subprocess.run(
+            ["gsettings", "get", "org.gnome.desktop.interface", "text-scaling-factor"],
+            capture_output=True, text=True, timeout=2, check=False,
+        )
+        factor = _to_float(result.stdout.strip())
+        if factor and factor > 1.0:
+            # XWayland em telas HiDPI: text-scale sozinho nao compensa a escala 2x
+            return max(2.0, factor)
+    except Exception:
+        pass
+
+    # 3. XWayland em telas HiDPI nao expoe a escala real; assume 2.0
+    return 2.0
 
 
 def resolve_widget_scaling(
@@ -170,13 +215,12 @@ def resolve_widget_scaling(
 def apply_widget_scaling(factor: float) -> None:
     """Aplica a escala ANTES de criar ``CTk()``.
 
-    Em Linux/HiDPI as constantes de tema e a geometria da janela ja sao
-    escaladas em _LINUX_SCALE; customtkinter scaling fica em 1.0 para
-    evitar conflito. Em Windows o sistema gerencia HiDPI e usamos apenas
-    o widget_scaling com janela em 1.0.
+    Em Linux/HiDPI usa _LINUX_SCALE para widgets e janela, mantendo
+    proporcoes corretas. Em Windows o sistema gerencia HiDPI e usamos
+    apenas o widget_scaling com janela em 1.0.
     """
     if sys.platform.startswith("linux"):
-        ctk.set_widget_scaling(1.0)
+        ctk.set_widget_scaling(_LINUX_SCALE)
         ctk.set_window_scaling(_LINUX_SCALE)
     else:
         ctk.set_widget_scaling(factor)
