@@ -56,6 +56,15 @@ def _open_folder_crossplatform(path: str) -> None:
             subprocess.Popen(["xdg-open", path])
 
 
+def apply_speaker_map(panel, mapping: dict) -> None:
+    """Carrega um mapping de falantes persistido em um ResultsPanel.
+
+    Helper puro e headless-friendly usado no startup da janela principal.
+    """
+    if mapping and hasattr(panel, "load_speaker_map"):
+        panel.load_speaker_map(mapping)
+
+
 class MainWindow:
     """Janela principal do Gravador de Legendas."""
 
@@ -90,10 +99,14 @@ class MainWindow:
         self._root.minsize(960, 600)
 
         self._is_dark = config_store.get("theme", "light") == "dark"
+        self._closing = False
 
         # Construção da UI
         self._build_ui()
         self._bind_shortcuts()
+
+        # Carregar speaker map persistido
+        self._load_speaker_map()
 
         # Restaurar prefixo (persistido no SettingsDialog)
         _ = config_store.get("last_prefix", "legendas")
@@ -727,12 +740,43 @@ class MainWindow:
         _open_folder_crossplatform(settings.recording_dir)
 
     def _on_closing(self):
-        self.session.stop()
-        if self._audio_manager.is_running:
-            self._audio_manager.stop()
-        geometry = self._root.geometry()
-        config_store.set("window_geometry", geometry)
-        self._root.destroy()
+        _perform_window_close(self, config_store)
+
+    def _load_speaker_map(self):
+        """Carrega o speaker map persistido no ResultsPanel."""
+        mapping = config_store.get("speaker_map", {})
+        apply_speaker_map(self._results, mapping)
 
     def run(self):
         self._root.mainloop()
+
+
+def _shutdown(window, store) -> None:
+    """Encapsula a lógica de shutdown de MainWindow para testes headless.
+
+    Ordem:
+      1. Parar AudioManager se houver captura ativa.
+      2. Parar SessionManager/OCR.
+      3. Persistir geometria da janela.
+    """
+    if window._audio_manager.is_running:
+        window._audio_manager.stop()
+    window.session.stop()
+    geometry = window._root.geometry()
+    store.set("window_geometry", geometry)
+
+
+def _perform_window_close(window, store) -> bool:
+    """Fecha a janela de forma idempotente.
+
+    Returns:
+        True se executou o shutdown/destruição; False se já estava fechando.
+    """
+    if window._closing:
+        return False
+    window._closing = True
+    try:
+        _shutdown(window, store)
+    finally:
+        window._root.destroy()
+    return True

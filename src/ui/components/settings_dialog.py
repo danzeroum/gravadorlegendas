@@ -29,7 +29,7 @@ class SettingsDialog(ctk.CTkToplevel):
         self._on_theme_change = on_theme_change
         self._on_scaling_change = on_scaling_change
         self._on_prefix_change = on_prefix_change
-        self._on_select_region = on_select_region
+        self._select_region_callback = on_select_region
         self._on_ocr_start = on_ocr_start
         self._on_ocr_stop = on_ocr_stop
         self._llm_config_provider = llm_config_provider
@@ -293,7 +293,7 @@ class SettingsDialog(ctk.CTkToplevel):
             frame, text="Selecionar Região", height=BUTTON_HEIGHT,
             font=Theme.button(), fg_color=Theme.SURFACE_ELEVATED, text_color=Theme.TEXT,
             border_width=1, border_color=Theme.BORDER, hover_color=Theme.BORDER,
-            command=self._on_select_region,
+            command=self._handle_select_region,
         )
         self._btn_region.grid(row=1, column=0, padx=PAD_MD, pady=PAD_MD, sticky="w")
         install_focus_ring(self._btn_region)
@@ -357,8 +357,8 @@ class SettingsDialog(ctk.CTkToplevel):
             return Theme.DANGER[0]
         return Theme.SUCCESS[0]
 
-    def _on_select_region(self):
-        region = self._on_select_region()
+    def _handle_select_region(self):
+        region = self._select_region_callback()
         if region:
             self._region_lbl.configure(
                 text=f"Região: top={region['top']}, left={region['left']}, width={region['width']}, height={region['height']}"
@@ -431,9 +431,6 @@ class SettingsDialog(ctk.CTkToplevel):
         self._rebuild_ia_fields()
         self._populate_ia_fields(active)
 
-        # Falantes
-        self.load_speakers(config_store.get("speaker_map", {}))
-
     def _update_scale_note(self, factor: float):
         if abs(factor - 1.0) > 0.001:
             self._scale_note.configure(text="⚠ A escala será aplicada ao reiniciar o aplicativo")
@@ -441,11 +438,6 @@ class SettingsDialog(ctk.CTkToplevel):
             self._scale_note.configure(text="")
 
     # --- API pública para app.py ---
-
-    def load_speakers(self, mapping: dict):
-        # O painel de falantes está em ResultsPanel, não aqui
-        # Este método existe para compatibilidade se necessário
-        pass
 
     def close(self):
         self.grab_release()

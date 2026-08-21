@@ -9,7 +9,7 @@ def pytest_configure(config):
     """Executa antes de todos os testes: configura structlog com logger stdlib válido."""
     # Configurar logging stdlib primeiro
     logging.basicConfig(level=logging.DEBUG)
-    
+
     structlog.reset_defaults()
     structlog.configure(
         processors=[
