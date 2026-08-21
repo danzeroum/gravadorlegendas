@@ -115,9 +115,28 @@ class TestDetectDisplayScale:
             return _Result()
 
         monkeypatch.setattr(theme_module.subprocess, "run", fake_run)
-        assert theme_module.detect_display_scale() == 1.5
+        # XWayland em telas HiDPI: minimo 2.0, mesmo com text-scale 1.5
+        assert theme_module.detect_display_scale() == 2.0
         assert "xrdb" in calls
         assert "gsettings" in calls
+
+    def test_xwayland_96dpi_with_text_scale(self, monkeypatch):
+        """XWayland reporta 96 DPI; text-scale > 1 nao compensa escala 2x."""
+        monkeypatch.setattr(theme_module.sys, "platform", "linux")
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd[0])
+            class _Result:
+                stdout = ""
+            if cmd[0] == "xrdb":
+                _Result.stdout = "Xft.dpi:\t96\n"
+            elif cmd[0] == "gsettings":
+                _Result.stdout = "1.21\n"
+            return _Result()
+
+        monkeypatch.setattr(theme_module.subprocess, "run", fake_run)
+        assert theme_module.detect_display_scale() == 2.0
 
     def test_linux_fallback_when_detection_fails(self, monkeypatch):
         monkeypatch.setattr(theme_module.sys, "platform", "linux")

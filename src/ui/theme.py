@@ -75,8 +75,8 @@ def detect_display_scale() -> float:
     fator de texto (ex.: 96 * 2.0 * 1.21 = 232). Retorna 1.0 em Windows,
     macOS ou se a detecção falhar.
 
-    XWayland costuma reportar 96 DPI mesmo em telas 2x, então usamos um
-    fallback mínimo de 2.0 no Linux para garantir legibilidade.
+    XWayland costuma reportar 96 DPI mesmo em telas 2x, então quando Xft.dpi
+    é 96 (ou inexistente) usamos 2.0 como fallback para garantir legibilidade.
     """
     if not sys.platform.startswith("linux"):
         return 1.0
@@ -92,7 +92,8 @@ def detect_display_scale() -> float:
                 parts = line.split(":", 1)
                 if len(parts) == 2:
                     dpi = _to_float(parts[1].strip())
-                    if dpi and dpi > 0:
+                    if dpi and dpi > 96:
+                        # DPI real > 96 (ex.: 116, 192, 232)
                         return max(1.0, dpi / 96.0)
     except Exception:
         pass
@@ -105,11 +106,12 @@ def detect_display_scale() -> float:
         )
         factor = _to_float(result.stdout.strip())
         if factor and factor > 1.0:
-            return max(1.0, factor)
+            # XWayland em telas HiDPI: text-scale sozinho nao compensa a escala 2x
+            return max(2.0, factor)
     except Exception:
         pass
 
-    # 3. XWayland em telas HiDPI não expoe a escala real; assume 2.0
+    # 3. XWayland em telas HiDPI nao expoe a escala real; assume 2.0
     return 2.0
 
 
