@@ -46,6 +46,7 @@ class TestThemeConstants:
         assert 0.9 in theme_module.SCALING_OPTIONS.values()
         assert 1.5 in theme_module.SCALING_OPTIONS.values()
         assert 2.0 in theme_module.SCALING_OPTIONS.values()
+        assert 3.0 in theme_module.SCALING_OPTIONS.values()
 
 
 class TestResolveWidgetScaling:
@@ -68,7 +69,7 @@ class TestResolveWidgetScaling:
         assert factor == theme_module.MIN_WIDGET_SCALING
 
     def test_clamp_max(self):
-        factor = theme_module.resolve_widget_scaling(env={"APP_WIDGET_SCALING": "2.0"}, stored=None)
+        factor = theme_module.resolve_widget_scaling(env={"APP_WIDGET_SCALING": "4.0"}, stored=None)
         assert factor == theme_module.MAX_WIDGET_SCALING
 
     def test_invalid_env_ignored(self):
@@ -83,3 +84,48 @@ class TestScalingLabel:
         assert theme_module.scaling_label(1.2) == "125%"
         # 0.95 está equidistante de 0.9 e 1.0; min() pega o primeiro
         assert theme_module.scaling_label(0.95) in ("90%", "100%")
+
+
+class TestDetectDisplayScale:
+    def test_returns_one_on_non_linux(self, monkeypatch):
+        monkeypatch.setattr(theme_module.sys, "platform", "win32")
+        assert theme_module.detect_display_scale() == 1.0
+
+    def test_uses_xrdb_dpi_on_linux(self, monkeypatch):
+        monkeypatch.setattr(theme_module.sys, "platform", "linux")
+
+        def fake_run(cmd, **kwargs):
+            class _Result:
+                stdout = "Xft.dpi:\t192\n"
+            return _Result()
+
+        monkeypatch.setattr(theme_module.subprocess, "run", fake_run)
+        assert theme_module.detect_display_scale() == 2.0
+
+    def test_fallback_to_gsettings(self, monkeypatch):
+        monkeypatch.setattr(theme_module.sys, "platform", "linux")
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd[0])
+            class _Result:
+                stdout = ""
+            if cmd[0] == "gsettings":
+                _Result.stdout = "1.5\n"
+            return _Result()
+
+        monkeypatch.setattr(theme_module.subprocess, "run", fake_run)
+        assert theme_module.detect_display_scale() == 1.5
+        assert "xrdb" in calls
+        assert "gsettings" in calls
+
+    def test_returns_one_when_detection_fails(self, monkeypatch):
+        monkeypatch.setattr(theme_module.sys, "platform", "linux")
+
+        def fake_run(cmd, **kwargs):
+            class _Result:
+                stdout = ""
+            return _Result()
+
+        monkeypatch.setattr(theme_module.subprocess, "run", fake_run)
+        assert theme_module.detect_display_scale() == 1.0

@@ -16,7 +16,7 @@ _DEFAULTS = {
     "use_api_translate": False,
     "use_api_answer": False,
     "window_geometry": "1200x800",
-    "ui_scaling": 1.25,
+    "ui_scaling": 1.0,
     "llm": {
         "active_provider": "ollama",
         "providers": {

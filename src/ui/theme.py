@@ -10,10 +10,15 @@ Regras deste módulo:
   evitar escala dupla em cascata (janela × widgets) no Linux.
 - ``apply_widget_scaling`` deve ser chamada ANTES de criar ``ctk.CTk()``;
   mudanças de escala persistidas exigem reinício da UI.
+- Em Linux, detectamos a escala do display (Xft.dpi / gsettings) e
+  a multiplicamos pela escolha do usuário para corrigir legibilidade em
+  Wayland/HiDPI.
 """
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 from typing import Mapping
 
 import customtkinter as ctk
@@ -46,7 +51,7 @@ RESULTS_PANEL_WIDTH = 460
 WINDOW_SCALING = 1.0  # fixo: fator de usuário nunca vai para a janela
 DEFAULT_WIDGET_SCALING = 1.25
 MIN_WIDGET_SCALING = 0.9
-MAX_WIDGET_SCALING = 2.0
+MAX_WIDGET_SCALING = 3.0
 WIDGET_SCALING_ENV = "APP_WIDGET_SCALING"
 
 # Opções exibidas no seletor de escala (rótulo → fator)
@@ -58,7 +63,50 @@ SCALING_OPTIONS: dict[str, float] = {
     "150%": 1.5,
     "175%": 1.75,
     "200%": 2.0,
+    "250%": 2.5,
+    "300%": 3.0,
 }
+
+
+def detect_display_scale() -> float:
+    """Detecta a escala do display no Linux via Xft.dpi ou gsettings.
+
+    Em Wayland/HiDPI, Xft.dpi reflete o produto entre escala de display e
+    fator de texto (ex.: 96 * 2.0 * 1.21 = 232). Retorna 1.0 em Windows,
+    macOS ou se a detecção falhar.
+    """
+    if not sys.platform.startswith("linux"):
+        return 1.0
+
+    # 1. Xft.dpi via xrdb (presente na maioria dos desktops X11/Wayland)
+    try:
+        result = subprocess.run(
+            ["xrdb", "-query"],
+            capture_output=True, text=True, timeout=2, check=False,
+        )
+        for line in result.stdout.splitlines():
+            if "xft.dpi" in line.lower():
+                parts = line.split(":", 1)
+                if len(parts) == 2:
+                    dpi = _to_float(parts[1].strip())
+                    if dpi and dpi > 0:
+                        return max(1.0, dpi / 96.0)
+    except Exception:
+        pass
+
+    # 2. Fallback: gsettings do GNOME (text-scaling-factor)
+    try:
+        result = subprocess.run(
+            ["gsettings", "get", "org.gnome.desktop.interface", "text-scaling-factor"],
+            capture_output=True, text=True, timeout=2, check=False,
+        )
+        factor = _to_float(result.stdout.strip())
+        if factor and factor > 0:
+            return max(1.0, factor)
+    except Exception:
+        pass
+
+    return 1.0
 
 
 def _to_float(value) -> float | None:
@@ -87,9 +135,15 @@ def resolve_widget_scaling(
 
 
 def apply_widget_scaling(factor: float) -> None:
-    """Aplica a escala ANTES de criar ``CTk()``. Janela permanece 1.0."""
+    """Aplica a escala ANTES de criar ``CTk()``.
+
+    Em Linux/HiDPI usamos o mesmo fator para widgets e janela, para que
+    a geometria seja proporcional ao tamanho dos widgets. Em Windows o
+    sistema gerencia HiDPI, entao WINDOW_SCALING permanece 1.0.
+    """
     ctk.set_widget_scaling(factor)
-    ctk.set_window_scaling(WINDOW_SCALING)
+    window_factor = factor if sys.platform.startswith("linux") else WINDOW_SCALING
+    ctk.set_window_scaling(window_factor)
 
 
 def scaling_label(factor: float) -> str:
