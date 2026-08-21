@@ -22,10 +22,9 @@ import os
 import threading
 import time
 import wave
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import BinaryIO
 
 import structlog
 

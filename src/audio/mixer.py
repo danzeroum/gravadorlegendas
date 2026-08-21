@@ -14,7 +14,6 @@ simplesmente repassa a outra sem degradar o sinal (cobre T4.3).
 """
 from __future__ import annotations
 
-import struct
 import threading
 
 import numpy as np
