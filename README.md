@@ -115,31 +115,47 @@ huggingface-cli login  # aceite os termos em pyannote/speaker-diarization-3.1
 python -m src.main
 ```
 
-| Aba | Função |
-|-----|--------|
-| Tradução | Exibição ao vivo do texto original + traduzido |
-| Captura | Iniciar/parar captura de tela, configurar prefixo |
-| Áudio | Iniciar/parar captura de áudio, transcrição ao vivo, diarização, exportar |
-| Resumo | Gerar resumo do conteúdo capturado (OCR + áudio) |
-| Respostas | Detectar perguntas e gerar respostas Globish |
-| IA | Configurar provider LLM ativo (Ollama, OpenAI, DeepSeek, LocalGGUF) |
-| Config | Tema, região de captura, atalhos, **backends multiplataforma** |
+A nova tela principal prioriza o fluxo **captura de áudio → transcrição ao vivo → ações sobre o texto**:
 
-A aba **Config** agora exibe as configurações detectadas:
-- Sistema operacional e sessão gráfica (X11/Wayland).
-- Backend de áudio ativo (wasapi/pipewire).
-- Fonte de legenda ativa (windows_live_captions/local_stt/screen_ocr).
-- Modelo Whisper e device STT (auto/cpu/cuda).
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ Gravador de Legendas                  ● Pronto   [☀️ Claro] [⚙ Config]  │
+├──────────────────────────────────────────────────────────────────────┤
+│ Origem: [🔊 Áudio do sistema ▾]  [🔄]  [▶ Iniciar transcrição]  00:00:00 │
+│                                                                      │
+│ ┌──────────────────────────────────────────────────────────────────┐ │
+│ │ Transcrição ao vivo                                    [Copiar][Salvar .txt][Exportar .md][Limpar] │
+│ │ ┌──────────────────────────────────────────────────────────────┐ │ │
+│ │ │ A fala transcrita aparece aqui, em fonte confortável, com     │ │ │
+│ │ │ timestamps opcionais e rolagem automática controlável.        │ │ │
+│ │ └──────────────────────────────────────────────────────────────┘ │ │
+│ └──────────────────────────────────────────────────────────────────┘ │
+│ [Traduzir] [Gerar resumo] [Responder]                              [◧ Painel]  │
+├──────────────────────────────────────────────────────────────────────┤
+│ Origem: 🔊 Monitor PipeWire • Modelo: base • Backend: PipeWire     │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+- **Painel lateral recolhível** (▸ Painel): Tradução, Resumo, Resposta, Falantes — abre sob demanda.
+- **Configurações** (`⚙`): modal com Aparência (tema, escala DPI, prefixo), IA, Captura OCR, Sistema.
+- A captura OCR (tela) permanece disponível no modal Config → "Captura de tela", mas **não funciona em Wayland** sem portal.
 
 #### Atalhos de teclado
 
 | Atalho | Ação |
 |--------|------|
-| `Ctrl+I` | Abrir aba IA |
-| `Ctrl+P` | Abrir aba Captura |
-| `Ctrl+R` | Abrir aba Resumo |
-| `Ctrl+S` | Abrir aba Respostas |
-| `Ctrl+E` | Alternar tema |
+| `Ctrl+R` | Iniciar/parar gravação (toggle) |
+| `Ctrl+S` | Salvar transcrição como .txt |
+| `Ctrl+L` | Limpar transcrição (com confirmação) |
+| `Ctrl+,` | Abrir configurações |
+| `Esc` | Fechar painel lateral ou diálogo modal |
+
+#### Escala DPI (alta densidade / Fedora)
+
+A interface respeita `APP_WIDGET_SCALING` (env) ou a preferência persistida em Configurações → Aparência → Escala da interface (90% / 100% / 110% / 125% / 140%).
+
+- A escala aplica-se **apenas aos widgets** (`ctk.set_widget_scaling`); a janela permanece em 1.0 para evitar escala dupla.
+- Mudanças de escala exigem **reinício da aplicação** (aviso exibido no diálogo).
 
 ### Modos de captura
 

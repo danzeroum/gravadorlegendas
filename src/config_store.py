@@ -15,7 +15,8 @@ _DEFAULTS = {
     "activate_captions": True,
     "use_api_translate": False,
     "use_api_answer": False,
-    "window_geometry": "960x680",
+    "window_geometry": "1100x720",
+    "ui_scaling": 1.0,
     "llm": {
         "active_provider": "ollama",
         "providers": {
