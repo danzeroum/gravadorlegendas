@@ -74,6 +74,9 @@ def detect_display_scale() -> float:
     Em Wayland/HiDPI, Xft.dpi reflete o produto entre escala de display e
     fator de texto (ex.: 96 * 2.0 * 1.21 = 232). Retorna 1.0 em Windows,
     macOS ou se a detecção falhar.
+
+    XWayland costuma reportar 96 DPI mesmo em telas 2x, então usamos um
+    fallback mínimo de 2.0 no Linux para garantir legibilidade.
     """
     if not sys.platform.startswith("linux"):
         return 1.0
@@ -101,12 +104,13 @@ def detect_display_scale() -> float:
             capture_output=True, text=True, timeout=2, check=False,
         )
         factor = _to_float(result.stdout.strip())
-        if factor and factor > 0:
+        if factor and factor > 1.0:
             return max(1.0, factor)
     except Exception:
         pass
 
-    return 1.0
+    # 3. XWayland em telas HiDPI não expoe a escala real; assume 2.0
+    return 2.0
 
 
 def _to_float(value) -> float | None:

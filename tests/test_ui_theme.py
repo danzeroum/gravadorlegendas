@@ -119,7 +119,7 @@ class TestDetectDisplayScale:
         assert "xrdb" in calls
         assert "gsettings" in calls
 
-    def test_returns_one_when_detection_fails(self, monkeypatch):
+    def test_linux_fallback_when_detection_fails(self, monkeypatch):
         monkeypatch.setattr(theme_module.sys, "platform", "linux")
 
         def fake_run(cmd, **kwargs):
@@ -128,4 +128,5 @@ class TestDetectDisplayScale:
             return _Result()
 
         monkeypatch.setattr(theme_module.subprocess, "run", fake_run)
-        assert theme_module.detect_display_scale() == 1.0
+        # XWayland em telas HiDPI nao expoe escala; usamos 2.0 como fallback
+        assert theme_module.detect_display_scale() == 2.0
