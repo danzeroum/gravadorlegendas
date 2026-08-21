@@ -21,31 +21,32 @@ import customtkinter as ctk
 # --- Tipografia -----------------------------------------------------------
 # "Sans Serif"/"Monospace" são famílias genéricas que o Tk resolve via
 # fontconfig no Fedora — não dependem de uma fonte empacotada (ex.: Inter).
+# Tamanhos aumentados para legibilidade em telas modernas (HiDPI / Wayland).
 FONT_FAMILY = "Sans Serif"
 FONT_FAMILY_MONO = "Monospace"
 
-FONT_TITLE_SIZE = 22
-FONT_HEADING_SIZE = 18
-FONT_BODY_SIZE = 15
-FONT_LABEL_SIZE = 13
-FONT_BUTTON_SIZE = 14
+FONT_TITLE_SIZE = 26
+FONT_HEADING_SIZE = 22
+FONT_BODY_SIZE = 18
+FONT_LABEL_SIZE = 16
+FONT_BUTTON_SIZE = 16
 
 # --- Dimensões ---
-BUTTON_HEIGHT = 40
-BUTTON_HEIGHT_PRIMARY = 44
+BUTTON_HEIGHT = 44
+BUTTON_HEIGHT_PRIMARY = 48
 BUTTON_WIDTH_SMALL = 96
 
-PAD_SM = 8
-PAD_MD = 12
-PAD_LG = 20
+PAD_SM = 10
+PAD_MD = 14
+PAD_LG = 24
 
-RESULTS_PANEL_WIDTH = 420
+RESULTS_PANEL_WIDTH = 460
 
 # --- Escala DPI -----------------------------------------------------------
 WINDOW_SCALING = 1.0  # fixo: fator de usuário nunca vai para a janela
-DEFAULT_WIDGET_SCALING = 1.0
+DEFAULT_WIDGET_SCALING = 1.25
 MIN_WIDGET_SCALING = 0.9
-MAX_WIDGET_SCALING = 1.4
+MAX_WIDGET_SCALING = 2.0
 WIDGET_SCALING_ENV = "APP_WIDGET_SCALING"
 
 # Opções exibidas no seletor de escala (rótulo → fator)
@@ -54,7 +55,9 @@ SCALING_OPTIONS: dict[str, float] = {
     "100%": 1.0,
     "110%": 1.1,
     "125%": 1.25,
-    "140%": 1.4,
+    "150%": 1.5,
+    "175%": 1.75,
+    "200%": 2.0,
 }
 
 

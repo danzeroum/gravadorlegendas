@@ -1,11 +1,8 @@
 """Testes headless para persistência de escala UI no config_store."""
 from __future__ import annotations
 
-import json
 import tempfile
 from pathlib import Path
-
-import pytest
 
 from src.config_store import ConfigStore, _DEFAULTS
 
@@ -13,7 +10,7 @@ from src.config_store import ConfigStore, _DEFAULTS
 class TestUiScalingConfig:
     def test_default_ui_scaling(self):
         store = ConfigStore()
-        assert store.get("ui_scaling") == 1.0
+        assert store.get("ui_scaling") == 1.25
 
     def test_persist_ui_scaling(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -24,14 +21,14 @@ class TestUiScalingConfig:
             cs._CONFIG_FILE = config_path
             try:
                 store = ConfigStore()
-                store.set("ui_scaling", 1.25)
-                assert store.get("ui_scaling") == 1.25
+                store.set("ui_scaling", 1.5)
+                assert store.get("ui_scaling") == 1.5
                 # nova instância carrega do disco
                 store2 = ConfigStore()
-                assert store2.get("ui_scaling") == 1.25
+                assert store2.get("ui_scaling") == 1.5
             finally:
                 cs._CONFIG_FILE = orig
 
     def test_ui_scaling_in_defaults(self):
         assert "ui_scaling" in _DEFAULTS
-        assert _DEFAULTS["ui_scaling"] == 1.0
+        assert _DEFAULTS["ui_scaling"] == 1.25

@@ -44,7 +44,8 @@ class TestThemeConstants:
     def test_scaling_options(self):
         assert theme_module.SCALING_OPTIONS["100%"] == 1.0
         assert 0.9 in theme_module.SCALING_OPTIONS.values()
-        assert 1.4 in theme_module.SCALING_OPTIONS.values()
+        assert 1.5 in theme_module.SCALING_OPTIONS.values()
+        assert 2.0 in theme_module.SCALING_OPTIONS.values()
 
 
 class TestResolveWidgetScaling:
