@@ -311,6 +311,16 @@ Variáveis de ambiente (`.env`) — veja `.env.example` para o template completo
 | `SAMPLE_RATE` | `16000` | Taxa de amostragem (Hz) |
 | `CHANNELS` | `1` | Número de canais (1=mono) |
 
+### Curto prazo (gravação dual-track, RNNoise, export SRT/VTT)
+
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `RECORD_RAW_AUDIO` | `false` | Se `true`, ativa gravação dual-track (mic+sistema em WAVs separados). Os arquivos são salvos em `RECORDING_DIR` com sufixos `_mic.wav` e `_sistema.wav`. |
+| `RECORDING_DIR` | `data/recordings` | Diretório onde transcrições `.txt` (e agora `.srt`/`.vtt`/`.wav`) são salvos. |
+| `NOISE_SUPPRESSION` | `false` | Se `true`, ativa filtro de ruído RNNoise no pipeline de áudio (entre captura e Whisper). Reduz ruído de fundo em tempo real, mas adiciona latência — validar com `T5.2` antes de habilitar em produção. |
+| `EXPORT_SRT` | `true` | Se `true`, gera arquivo `.srt` ao lado do `.txt` ao final da sessão. |
+| `EXPORT_VTT` | `true` | Se `true`, gera arquivo `.vtt` ao lado do `.txt` ao final da sessão. |
+
 ### Tradicionais (preservadas)
 
 | Variável | Padrão | Descrição |

@@ -121,6 +121,32 @@ class Settings:
     sample_rate: int = int(os.getenv("SAMPLE_RATE", "16000"))
     channels: int = int(os.getenv("CHANNELS", "1"))
 
+    # --- Frente A: gravação dual-track (mic + sistema em arquivos separados) ---
+    # Quando True, o AudioManager instancia um DualTrackRecorder internamente
+    # e o alimenta com os mesmos frames que fluem para o pipeline de STT.
+    # Default False — comportamento retrocompatível.
+    record_raw_audio: bool = os.getenv(
+        "RECORD_RAW_AUDIO", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # --- Frente C: RNNoise (supressão de ruído em tempo real) ---
+    # Quando True, insere RNNoiseFilter no pipeline antes do buffer circular.
+    # Default False — o filtro adiciona latência e pode prejudicar a
+    # transcrição em ambientes já silenciosos (validado pelo guard-rail T5.2).
+    noise_suppression: bool = os.getenv(
+        "NOISE_SUPPRESSION", "false"
+    ).lower() in ("1", "true", "yes")
+
+    # --- Frente D: export SRT/VTT ---
+    # Quando True (default), o SessionManager gera arquivos .srt e .vtt ao
+    # lado do .txt ao finalizar a sessão. Feature aditiva, não destrutiva.
+    export_srt: bool = os.getenv(
+        "EXPORT_SRT", "true"
+    ).lower() in ("1", "true", "yes")
+    export_vtt: bool = os.getenv(
+        "EXPORT_VTT", "true"
+    ).lower() in ("1", "true", "yes")
+
     @property
     def has_ollama(self) -> bool:
         return bool(self.ollama_username and self.ollama_password)

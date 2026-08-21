@@ -159,7 +159,27 @@ class TranscriberProcess(multiprocessing.Process):
                         temperature=self._temperature,
                         vad_filter=self._vad_filter,
                     )
-                    text = " ".join(seg.text for seg in segments)
+                    # Frente D: coleta segmentos individuais com timestamp
+                    # absoluto (relativo ao início da sessão do processo).
+                    # O offset por batch já está embutido em seg_start.
+                    seg_list = []
+                    text_parts = []
+                    for seg in segments:
+                        seg_text = (seg.text or "").strip()
+                        if not seg_text:
+                            # T6.6: nunca emitir segmento vazio (silêncio)
+                            continue
+                        # seg.start/seg.end são relativos ao batch atual;
+                        # somar seg_start para torná-los absolutos da sessão.
+                        abs_start = round(seg_start + float(seg.start), 3)
+                        abs_end = round(seg_start + float(seg.end), 3)
+                        seg_list.append({
+                            "start": abs_start,
+                            "end": abs_end,
+                            "text": seg_text,
+                        })
+                        text_parts.append(seg_text)
+                    text = " ".join(text_parts)
                     _logger.info(
                         "stt_batch_done",
                         batch=batch_index,
@@ -167,6 +187,7 @@ class TranscriberProcess(multiprocessing.Process):
                         rms=round(_rms, 4),
                         peak=round(_peak, 4),
                         text=text.strip(),
+                        n_segments=len(seg_list),
                     )
                     if text.strip():
                         self._output.put({
@@ -174,6 +195,9 @@ class TranscriberProcess(multiprocessing.Process):
                             "start": seg_start,
                             "end": seg_end,
                             "batch": batch_index,
+                            # Frente D: lista de segmentos com timestamp
+                            # absoluto por segmento, para o exportador SRT/VTT.
+                            "segments": seg_list,
                         })
                 except Exception as e:
                     self._output.put({"error": str(e)})
