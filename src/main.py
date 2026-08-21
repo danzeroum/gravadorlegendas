@@ -7,10 +7,19 @@ atualização da interface. A partir da migração Linux/Fedora, o
 - Windows: pode usar Legendas ao Vivo do Windows (default) ou
   transcrição local.
 - Linux: sempre usa transcrição local ou OCR de tela.
+
+A partir do plano de curto prazo, este módulo também:
+
+- **Frente D**: acumula segmentos de transcrição com timestamp
+  absoluto (``CaptionSegment``) durante a sessão, em paralelo à lista
+  de strings já existente para o ``.txt``. Ao finalizar, exporta
+  ``.srt`` e ``.vtt`` ao lado do ``.txt``, respeitando
+  ``settings.export_srt`` e ``settings.export_vtt``.
 """
 from __future__ import annotations
 
 import logging
+import os
 import time
 import threading
 import structlog
@@ -20,6 +29,8 @@ from src.capture.screen_capture import ScreenCapture, ScreenCaptureError
 from src.ocr.engine import OCREngine
 from src.translation.marianmt import TranslatorMarianMT
 from src.storage.file_manager import FileManager
+from src.storage.subtitle_exporter import SubtitleExporter
+from src.audio.models import CaptionSegment
 from src.nlp.question_detector import QuestionDetector
 from src.platform.detection import detect_capabilities
 
@@ -84,6 +95,9 @@ class SessionManager:
         self._thread: threading.Thread | None = None
 
         self._audio_captions: list[str] = []
+        # Frente D: segmentos com timestamp absoluto, para SRT/VTT.
+        self._caption_segments: list[CaptionSegment] = []
+        self._subtitle_exporter = SubtitleExporter()
 
         self.on_captured = None
         self.on_translated = None
@@ -114,6 +128,28 @@ class SessionManager:
         """Alimenta o session manager com transcrição de áudio com falantes."""
         if caption:
             self._audio_captions.append(caption)
+
+    def feed_caption_segment(self, start: float, end: float, text: str):
+        """Alimenta um segmento transcrito com timestamp absoluto.
+
+        Usado pelo ``AudioManager`` quando emite resultados da
+        transcrição (Frente D). Segmentos vazios são ignorados — o
+        filtro de VAD no ``TranscriberProcess`` já descarta silêncio,
+        mas esta checagem extra protege contra qualquer chamada
+        indesejada (cobre T6.6 — sem legenda alucinada em silêncio).
+
+        Args:
+            start: Tempo de início em segundos (absoluto da sessão).
+            end: Tempo de fim em segundos (absoluto da sessão).
+            text: Texto transcrito.
+        """
+        if not text or not text.strip():
+            return
+        if end <= start:
+            return
+        self._caption_segments.append(
+            CaptionSegment(start=start, end=end, text=text)
+        )
 
     @property
     def last_question(self) -> str:
@@ -161,9 +197,47 @@ class SessionManager:
         return f"Gravando em: {self._current_file}"
 
     def stop(self) -> str:
-        """Para a captura de legendas."""
+        """Para a captura de legendas.
+
+        Após parar, se ``settings.export_srt`` ou ``settings.export_vtt``
+        estiverem ativos e houver segmentos acumulados, gera os arquivos
+        de legenda ao lado do ``.txt``.
+        """
         self._is_running = False
+        self._export_subtitles()
         return "Gravação parada."
+
+    def _export_subtitles(self) -> None:
+        """Gera arquivos .srt e .vtt ao lado do .txt (Frente D).
+
+        Usa o mesmo prefixo/timestamp do ``_current_file`` para manter
+        coerência de nomeação. Se não houver segmentos, não cria arquivo
+        vazio (cobre T6.6 em nível de arquivo).
+        """
+        if not self._caption_segments:
+            return
+        if not self._current_file:
+            return
+        # Deriva o caminho .srt/.vtt a partir do .txt atual.
+        base, _ = os.path.splitext(self._current_file)
+        if settings.export_srt:
+            srt_path = base + ".srt"
+            try:
+                self._subtitle_exporter.save_srt(
+                    self._caption_segments, srt_path,
+                )
+            except Exception as e:
+                if _logger:
+                    _logger.error("srt_export_failed", error=str(e))
+        if settings.export_vtt:
+            vtt_path = base + ".vtt"
+            try:
+                self._subtitle_exporter.save_vtt(
+                    self._caption_segments, vtt_path,
+                )
+            except Exception as e:
+                if _logger:
+                    _logger.error("vtt_export_failed", error=str(e))
 
     def get_full_text(self) -> str:
         """Retorna todo o texto capturado (OCR + áudio) até o momento."""
