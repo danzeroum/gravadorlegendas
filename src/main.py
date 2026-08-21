@@ -10,6 +10,7 @@ atualização da interface. A partir da migração Linux/Fedora, o
 """
 from __future__ import annotations
 
+import logging
 import time
 import threading
 import structlog
@@ -30,6 +31,11 @@ def _configure_structlog() -> None:
     global _structlog_configured, _logger
     if _structlog_configured:
         return
+    # Configura logging stdlib primeiro
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+    )
     structlog.configure(
         processors=[
             structlog.stdlib.filter_by_level,
@@ -39,7 +45,8 @@ def _configure_structlog() -> None:
             structlog.processors.JSONRenderer(),
         ],
         context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(),
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=True,
     )
     _logger = structlog.get_logger()

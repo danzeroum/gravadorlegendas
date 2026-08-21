@@ -10,6 +10,8 @@ import wave
 import tempfile
 from collections import deque
 
+import structlog
+
 from src.audio.capture import AudioCapture
 from src.audio.vad import VoiceActivityDetector
 from src.audio.buffer import CircularAudioBuffer
@@ -17,6 +19,8 @@ from src.audio.transcribe import TranscriberProcess
 from src.audio.diarize import DiarizationProcess
 from src.audio.metrics import LatencyTracker, OverlapCounter
 from src.config import settings
+
+_logger = structlog.get_logger()
 
 
 _SPEAKER_MERGE_TOLERANCE = 0.3
@@ -162,12 +166,12 @@ class AudioManager:
         while self._is_running:
             try:
                 self._collect_diarization_nowait()
-            except Exception:
-                pass
+            except Exception as e:
+                _logger.error("pipeline_diarization_error", error=str(e))
             try:
                 self._collect_transcript()
-            except Exception:
-                pass
+            except Exception as e:
+                _logger.error("pipeline_transcript_error", error=str(e))
 
     def _collect_diarization_nowait(self):
         """Lê segmentos de diarização pendentes (non-blocking)."""
