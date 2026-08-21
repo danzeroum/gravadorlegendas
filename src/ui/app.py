@@ -34,7 +34,7 @@ from src.audio.manager import AudioManager
 from src.platform.detection import detect_capabilities, PlatformCapabilities
 
 from src.ui.theme import (
-    apply_widget_scaling, resolve_widget_scaling, detect_display_scale,
+    apply_widget_scaling, resolve_widget_scaling,
 )
 from src.ui.shortcuts import SHORTCUTS
 from src.ui.view_models.recording_state import RecordingState, RecordingStateMachine, format_duration
@@ -86,11 +86,14 @@ class MainWindow:
         self._audio_devices_meta: list[dict] = []
 
         # UI - ESCALA ANTES de criar CTk()
-        # Em Linux/HiDPI multiplica a escolha do usuário pela escala do display
-        # (Wayland/XWayland não escala automaticamente como no Windows).
-        display_scale = detect_display_scale()
-        ui_scaling = config_store.get("ui_scaling", 1.0)
-        apply_widget_scaling(resolve_widget_scaling(stored=ui_scaling * display_scale))
+        # Em Linux/HiDPI as constantes de tema (fontes, dimensoes) sao
+        # multiplicadas pela escala detectada em src/ui/theme.py; a janela
+        # tambem e escalada la. No Windows usamos o widget_scaling normal.
+        if sys.platform.startswith("linux"):
+            apply_widget_scaling(1.0)
+        else:
+            ui_scaling = config_store.get("ui_scaling", 1.0)
+            apply_widget_scaling(resolve_widget_scaling(stored=ui_scaling))
 
         ctk.set_appearance_mode(config_store.get("theme", "light"))
         ctk.set_default_color_theme("blue")

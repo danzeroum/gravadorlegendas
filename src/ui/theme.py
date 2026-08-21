@@ -23,49 +23,21 @@ from typing import Mapping
 
 import customtkinter as ctk
 
-# --- Tipografia -----------------------------------------------------------
-# "Sans Serif"/"Monospace" são famílias genéricas que o Tk resolve via
-# fontconfig no Fedora — não dependem de uma fonte empacotada (ex.: Inter).
-# Tamanhos aumentados para legibilidade em telas modernas (HiDPI / Wayland).
-FONT_FAMILY = "Sans Serif"
-FONT_FAMILY_MONO = "Monospace"
+from src.config_store import config_store
 
-FONT_TITLE_SIZE = 26
-FONT_HEADING_SIZE = 22
-FONT_BODY_SIZE = 18
-FONT_LABEL_SIZE = 16
-FONT_BUTTON_SIZE = 16
-
-# --- Dimensões ---
-BUTTON_HEIGHT = 44
-BUTTON_HEIGHT_PRIMARY = 48
-BUTTON_WIDTH_SMALL = 96
-
-PAD_SM = 10
-PAD_MD = 14
-PAD_LG = 24
-
-RESULTS_PANEL_WIDTH = 460
-
-# --- Escala DPI -----------------------------------------------------------
+# --- Escala DPI (definida antes da escala base Linux) ---------------------
 WINDOW_SCALING = 1.0  # fixo: fator de usuário nunca vai para a janela
 DEFAULT_WIDGET_SCALING = 1.25
 MIN_WIDGET_SCALING = 0.9
 MAX_WIDGET_SCALING = 3.0
 WIDGET_SCALING_ENV = "APP_WIDGET_SCALING"
 
-# Opções exibidas no seletor de escala (rótulo → fator)
-SCALING_OPTIONS: dict[str, float] = {
-    "90%": 0.9,
-    "100%": 1.0,
-    "110%": 1.1,
-    "125%": 1.25,
-    "150%": 1.5,
-    "175%": 1.75,
-    "200%": 2.0,
-    "250%": 2.5,
-    "300%": 3.0,
-}
+
+def _to_float(value) -> float | None:
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
 
 
 def detect_display_scale() -> float:
@@ -115,11 +87,66 @@ def detect_display_scale() -> float:
     return 2.0
 
 
-def _to_float(value) -> float | None:
+# --- Escala base Linux/Wayland --------------------------------------------
+# Aplicacoes X11 via XWayland nao sao escaladas pelo compositor. Sem ajuste,
+# fontes e widgets ficam minusculos em telas HiDPI. As constantes abaixo sao
+# multiplicadas por essa escala base; o usuario pode ajustar via
+# Configuracoes -> Aparanca (requer reinicio) ou APP_WIDGET_SCALING env.
+if sys.platform.startswith("linux"):
     try:
-        return float(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return None
+        _env_scale = float(os.environ.get(WIDGET_SCALING_ENV, ""))
+        _env_scale = max(MIN_WIDGET_SCALING, min(MAX_WIDGET_SCALING, _env_scale))
+    except ValueError:
+        _env_scale = 0.0
+
+    if _env_scale > 0:
+        _LINUX_SCALE = _env_scale
+    else:
+        _display_scale = detect_display_scale()
+        _user_scale = config_store.get("ui_scaling", 1.0)
+        _LINUX_SCALE = min(
+            MAX_WIDGET_SCALING,
+            max(MIN_WIDGET_SCALING, _display_scale * _user_scale),
+        )
+else:
+    _LINUX_SCALE = 1.0
+
+# --- Tipografia -----------------------------------------------------------
+# "Sans Serif"/"Monospace" são famílias genéricas que o Tk resolve via
+# fontconfig no Fedora — não dependem de uma fonte empacotada (ex.: Inter).
+# Tamanhos aumentados para legibilidade em telas modernas (HiDPI / Wayland).
+FONT_FAMILY = "Sans Serif"
+FONT_FAMILY_MONO = "Monospace"
+
+FONT_TITLE_SIZE = int(26 * _LINUX_SCALE)
+FONT_HEADING_SIZE = int(22 * _LINUX_SCALE)
+FONT_BODY_SIZE = int(18 * _LINUX_SCALE)
+FONT_LABEL_SIZE = int(16 * _LINUX_SCALE)
+FONT_BUTTON_SIZE = int(16 * _LINUX_SCALE)
+
+# --- Dimensões ---
+BUTTON_HEIGHT = int(44 * _LINUX_SCALE)
+BUTTON_HEIGHT_PRIMARY = int(48 * _LINUX_SCALE)
+BUTTON_WIDTH_SMALL = int(96 * _LINUX_SCALE)
+
+PAD_SM = int(10 * _LINUX_SCALE)
+PAD_MD = int(14 * _LINUX_SCALE)
+PAD_LG = int(24 * _LINUX_SCALE)
+
+RESULTS_PANEL_WIDTH = int(460 * _LINUX_SCALE)
+
+# Opções exibidas no seletor de escala (rótulo → fator)
+SCALING_OPTIONS: dict[str, float] = {
+    "90%": 0.9,
+    "100%": 1.0,
+    "110%": 1.1,
+    "125%": 1.25,
+    "150%": 1.5,
+    "175%": 1.75,
+    "200%": 2.0,
+    "250%": 2.5,
+    "300%": 3.0,
+}
 
 
 def resolve_widget_scaling(
@@ -143,13 +170,17 @@ def resolve_widget_scaling(
 def apply_widget_scaling(factor: float) -> None:
     """Aplica a escala ANTES de criar ``CTk()``.
 
-    Em Linux/HiDPI usamos o mesmo fator para widgets e janela, para que
-    a geometria seja proporcional ao tamanho dos widgets. Em Windows o
-    sistema gerencia HiDPI, entao WINDOW_SCALING permanece 1.0.
+    Em Linux/HiDPI as constantes de tema e a geometria da janela ja sao
+    escaladas em _LINUX_SCALE; customtkinter scaling fica em 1.0 para
+    evitar conflito. Em Windows o sistema gerencia HiDPI e usamos apenas
+    o widget_scaling com janela em 1.0.
     """
-    ctk.set_widget_scaling(factor)
-    window_factor = factor if sys.platform.startswith("linux") else WINDOW_SCALING
-    ctk.set_window_scaling(window_factor)
+    if sys.platform.startswith("linux"):
+        ctk.set_widget_scaling(1.0)
+        ctk.set_window_scaling(_LINUX_SCALE)
+    else:
+        ctk.set_widget_scaling(factor)
+        ctk.set_window_scaling(WINDOW_SCALING)
 
 
 def scaling_label(factor: float) -> str:
