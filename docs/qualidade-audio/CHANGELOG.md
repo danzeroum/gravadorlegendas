@@ -303,3 +303,19 @@ integridade deliberada). Decisões D-010/D-011 registradas.
 | Relatório JSON | **válido contra schema** (200 testes, golden verified) |
 | Secret scanning | **0 segredos** (adjudicação formal de falsos positivos) |
 | flake8 (arquivos novos + src/) | **0 violações** |
+
+---
+
+## 2026-09-10 08:40 UTC — Bloqueio registrado: push impossível com o token fornecido
+
+**Descrição:** Token GitHub autentica (identidade OK) mas tem Contents
+apenas Read — `git push` e Git Data API retornam 403. Sem `Contents:Write`
+não há como criar a branch remota nem abrir a PR (head inexistente).
+Decisão D-012: não contornar limites de permissão do token. Mitigação
+entregue: branch local completa verificada, git bundle + patches para
+push manual, descrição de PR pronta (PR-DESCRIPTION.md) e issue GitHub
+documentando o bloqueio com passos exatos.
+
+**Resultado:** Todos os requisitos da definição de pronto cumpridos
+exceto a abertura da PR em si — bloqueada por permissão do token, não
+por implementação. Evidências e caminho de conclusão manual registrados.

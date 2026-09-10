@@ -318,3 +318,50 @@ conteúdo suspeito — apenas arquivo+padrão.
 0 achados não adjudicados (ver RELATORIO-EXECUCAO.md §10).
 
 **Reverter:** Remover o script.
+
+---
+
+## D-012 — Bloqueio: token sem `Contents:Write` impede push da branch/PR
+
+**Data:** 2026-09-10 (UTC)
+
+**Contexto:** O token GitHub fornecido para a missão (fine-grained PAT,
+escopo `danzeroum/gravadorlegendas`) autentica corretamente (identidade
+confirmada via API 200), porém concede **apenas leitura** de Contents
+("code") — sem permissão de escrita. Evidências empíricas:
+
+- `git push` → `403 Permission to danzeroum/gravadorlegendas.git denied`;
+- `POST /repos/.../git/refs` (Git Data API) → `"Resource not accessible
+  by personal access token"`;
+- `git ls-remote` (leitura) → funciona;
+- permissões do token: Read/Write em actions/issues/pull-requests/etc.,
+  mas Contents apenas Read.
+
+Sem `Contents:Write` não é possível: criar a branch remota, enviar os
+commits ou, consequentemente, abrir a PR (que exige head existente).
+
+**Decisão:** NÃO contornar o limite do token (ex.: escalar via
+Actions/workflow para obter escrita seria burlar a fronteira de
+permissão intencional — vedado pelas regras de segurança da missão).
+Entrega da melhor implementação segura possível:
+
+1. Branch completa e verificada localmente
+   (`feat/audio-fidelity-test-suite`, 13 commits atômicos);
+2. `git bundle` + série de patches para push imediato pelo mantenedor
+   (um comando);
+3. Descrição completa da PR pronta (`docs/qualidade-audio/PR-DESCRIPTION.md`);
+4. Issue GitHub precisa documentando o bloqueio (issues:write concedido);
+5. Documentação total do bloqueio (esta decisão, CHANGELOG,
+   RELATORIO-EXECUCAO).
+
+**Alternativas:**
+- Escalar permissão via workflow_dispatch + GITHUB_TOKEN com
+  contents:write: rejeitado — contorno de fronteira de segurança.
+- Push para fork: inviável — PAT single-repo não cobre novos repositórios.
+- Declarar a PR como feita: rejeitado — sucesso simulado é vedado.
+
+**Consequências:** A PR fica pronta para abertura em um passo manual
+(push + `gh pr create --fill` ou colar a descrição). Todo o resto da
+definição de pronto foi cumprido.
+
+**Reverter:** N/A (registro de bloqueio).
