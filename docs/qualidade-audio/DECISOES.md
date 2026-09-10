@@ -365,3 +365,46 @@ Entrega da melhor implementação segura possível:
 definição de pronto foi cumprido.
 
 **Reverter:** N/A (registro de bloqueio).
+
+---
+
+## D-013 — Bloqueio: PAT sem permissão `Workflows` rejeita push que versiona CI
+
+**Data:** 2026-09-10 (UTC)
+
+**Contexto:** Após o desbloqueio de D-012 (token reemitido com
+`Contents: Read and write`), o `git push` autenticou com sucesso e
+alcançou o GitHub, mas foi rejeitado com mensagem completa e inequívoca:
+
+    ! [remote rejected] feat/audio-fidelity-test-suite -> feat/audio-fidelity-test-suite
+    (refusing to allow a Personal Access Token to create or update workflow
+    `.github/workflows/audio-fidelity.yml` without `workflow` scope)
+
+A entrega versiona arquivos em `.github/workflows/` (job `fidelity` em
+`ci.yml` e workflow noturno `audio-fidelity.yml` — requisitos CI-01..03),
+e o GitHub exige a permissão **Workflows** (leitura e escrita) para
+pushes que criam/alteram esses arquivos: proteção legítima contra
+escalonamento de privilégio via execução de workflow.
+
+**Decisão:** Mesmo princípio de D-012 — diagnóstico preciso e NENHUM
+contorno. Descartados por evidência: bug de variável de ambiente perdida
+(token exportado e consumido no mesmo comando; o push autenticou e
+alcançou o servidor); 403 de Contents (resolvido pelo reemitimento).
+Ação requerida do mantenedor: reemitir o PAT acrescentando
+**Workflows → Read and write** (demais permissões inalteradas).
+Registrado também na issue #4 (comentário interino com a mensagem
+completa). O tempo de espera foi convertido em hardening pré-push
+(D-014/D-015): a branch chega ao remoto já CI-ready.
+
+**Alternativas:**
+- Push parcial sem os commits de workflow: inviável — exigiria rewrite
+  de histórico (vedado) e amputaria o CI da entrega (CI-01..03).
+- Criar refs/commits via Git Data API: rejeitado — a mesma proteção se
+  aplica ao conteúdo; além de caminho não padrão de força.
+- Fork: inviável — PAT single-repo, fora do escopo da missão.
+
+**Consequências:** Push/PR aguardam ação do mantenedor; tudo o mais
+permanece pronto e verificado. Resolução será registrada em adendo datado
+do RELATORIO-EXECUCAO.md quando ocorrer.
+
+**Reverter:** N/A (registro de bloqueio).

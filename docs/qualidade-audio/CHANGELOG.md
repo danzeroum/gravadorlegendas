@@ -332,3 +332,22 @@ descrição de PR prontos. Suíte final validada: 197 passed, 2 skipped,
 **Resultado:** Definição de pronto cumprida integralmente exceto a
 abertura física da PR — bloqueada por Contents read-only do token
 (D-012), com caminho de conclusão manual documentado e entregue.
+
+---
+
+## 2026-09-10 10:10 UTC — Segundo bloqueio de push registrado (D-013: permissão Workflows)
+
+**Descrição:** Token reemitido com `Contents: Read and write` (D-012
+resolvido): o `git push` autenticou e alcançou o GitHub, mas foi
+rejeitado pela proteção de workflows — PAT sem permissão **Workflows**
+não pode criar/alterar arquivos em `.github/workflows/` (esta entrega
+versiona `ci.yml` + `audio-fidelity.yml`, requisitos CI-01..03).
+Mensagem completa registrada em D-013; issue #4 atualizada com
+comentário interino de diagnóstico. Nenhum contorno tentado (proteção
+legítima; mesmo princípio de D-012). Ação do mantenedor: acrescentar
+Workflows → Read and write ao token.
+
+**Resultado:** Push/PR aguardam ação do mantenedor. Branch local íntegra
+(14 commits, HEAD `1405169`). O tempo de espera foi convertido em
+hardening pré-push (D-014/D-015) — a branch nasce CI-ready no primeiro
+run do PR.
