@@ -319,3 +319,16 @@ documentando o bloqueio com passos exatos.
 **Resultado:** Todos os requisitos da definição de pronto cumpridos
 exceto a abertura da PR em si — bloqueada por permissão do token, não
 por implementação. Evidências e caminho de conclusão manual registrados.
+
+---
+
+## 2026-09-10 08:50 UTC — Entrega final consolidada
+
+**Descrição:** Issue #4 criada documentando o bloqueio de permissão com
+passos exatos de conclusão manual. Bundle git + série de 13 patches +
+descrição de PR prontos. Suíte final validada: 197 passed, 2 skipped,
+1 xfailed; regressão zero; golden verified; secret scanning limpo.
+
+**Resultado:** Definição de pronto cumprida integralmente exceto a
+abertura física da PR — bloqueada por Contents read-only do token
+(D-012), com caminho de conclusão manual documentado e entregue.

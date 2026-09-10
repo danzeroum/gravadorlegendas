@@ -13,7 +13,7 @@ comandos reproduzíveis.
 | Branch | `feat/audio-fidelity-test-suite` |
 | SHA inicial | `01497c5a448b926aea0bd78f601be17b18126c85` (main) |
 | SHA final | tip da branch na abertura da PR (o commit que fecha este relatório não pode conter o próprio SHA — paradoxo de auto-referência; ver descrição da PR) |
-| PR | **BLOQUEADA** — token sem Contents:Write (D-012); bundle + descrição prontos para push manual. Ver issue "Suíte de fidelidade: push da branch bloqueado por permissão do token" |
+| PR | **BLOQUEADA** — token sem Contents:Write (D-012); bundle + descrição prontos para push manual. Ver issue #4: https://github.com/danzeroum/gravadorlegendas/issues/4 |
 | Data da execução | 2026-09-10 (UTC) |
 
 ## 2. Ambiente relevante
