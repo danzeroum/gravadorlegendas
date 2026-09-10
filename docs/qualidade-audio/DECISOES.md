@@ -204,3 +204,31 @@ documentadas.
 noturno configurável.
 
 **Reverter:** Ajustar `tests/performance/test_capture_latency_budget.py`.
+
+---
+
+## D-008 — Achado: WASAPI sem PyAudio não propaga erro de start() ao chamador
+
+**Data:** 2026-09-10 (UTC)
+
+**Contexto:** Durante os testes de conformance (CONF-03), observou-se que
+``WasapiLoopbackCapture.start()`` em ambiente sem PyAudio instala a exceção
+(ImportError) **dentro da thread interna** de captura: o chamador não
+recebe erro explícito, ``is_running`` permanece True até ``stop()`` e a
+fila permanece vazia — falha silenciosa.
+
+**Decisão:** Documentar o comportamento como teste de registro
+(``TestWasapiKnownLimitation``) e risco conhecido. **Não corrigir nesta
+PR**: a correção exige propagação de erro assíncrona (callback ou evento)
+e validação em Windows real, fora do escopo da suíte de testes e do
+ambiente do agente (Linux, sem PyAudio/hardware).
+
+**Alternativas:**
+- Corrigir agora com try/except na thread + flag de erro: rejeitado —
+  mudança de comportamento de produção sem como validar em Windows.
+- Ignorar o achado: rejeitado — rastreabilidade exige registro.
+
+**Consequências:** Risco baixo (PyAudio é dependência obrigatória no
+fluxo Windows documentado); issue recomendada para PR dedicada.
+
+**Reverter:** N/A (registro de comportamento, sem mudança de código).

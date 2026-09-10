@@ -58,3 +58,31 @@ comportamento documentado do produto).
 | `flake8 tests/fidelity/ tests/fixtures/ scripts/gen_fidelity_fixtures.py` | **0 violações** |
 
 **Resultado:** FID-01..FID-10 com status `validated-local`.
+
+---
+
+## 2026-09-10 07:22 UTC — Fase 4: contratos, metamórficos e fuzzing
+
+**Descrição:** CONF-01..04, MET-01..05 e FUZZ-01..06 implementados.
+Hypothesis configurado com max_examples=25 e deadline=None (estabilidade de
+CI — nenhuma propriedade depende de temporização real). Correções durante o
+desenvolvimento: razão de RMS em escala linear (bug do próprio teste: 10·log10
+vs 20·log10), FakeSettings com todos os campos do validador real, filtro de
+canais válidos na estratégia. Achado documentado (D-008):
+WasapiLoopbackCapture.start() sem PyAudio não propaga erro ao chamador.
+
+**Arquivos envolvidos:**
+- `tests/fidelity/test_backend_conformance.py` (novo — CONF-01..04 + D-008)
+- `tests/fidelity/test_capture_metamorphic.py` (novo — MET-01..05)
+- `tests/fidelity/test_capture_fuzz.py` (novo — FUZZ-01..06)
+- `docs/qualidade-audio/DECISOES.md` (D-008)
+
+**Testes executados:**
+
+| Comando | Resultado |
+|---|---|
+| `pytest tests/fidelity/ -q` | **85 passed** |
+| `pytest tests/test_audio_backends.py tests/test_mixer.py tests/test_recorder.py tests/test_audio_manager.py -q` | **60 passed** (sem regressão) |
+| `flake8 tests/fidelity/ tests/fixtures/ scripts/` | **0 violações** |
+
+**Resultado:** CONF/MET/FUZZ com status `validated-local`.
