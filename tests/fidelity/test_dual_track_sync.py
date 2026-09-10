@@ -14,7 +14,6 @@ from __future__ import annotations
 import wave
 from unittest.mock import patch
 
-import numpy as np
 import pytest
 
 from src.audio.recorder import DualTrackRecorder

@@ -4,11 +4,11 @@ import sys
 
 sys.path.insert(0, ".")
 
-import numpy as np
+import numpy as np  # noqa: E402
 
-from src.filter.noise_suppression import RNNoiseFilter
-from tests.fidelity import dsp_utils as dsp
-from tests.fixtures import signal_generators as sg
+from src.filter.noise_suppression import RNNoiseFilter  # noqa: E402
+from tests.fidelity import dsp_utils as dsp  # noqa: E402
+from tests.fixtures import signal_generators as sg  # noqa: E402
 
 SR = 16000
 CHUNK = 480

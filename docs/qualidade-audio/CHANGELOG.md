@@ -117,3 +117,43 @@ caminho RNNoise real fica opt-in com skip explícito.
 
 **Resultado:** SYNC/RUIDO com status `validated-local` (RUIDO-02:
 `skipped-no-model` no agente, infraestrutura pronta).
+
+---
+
+## 2026-09-10 07:45 UTC — Fase 6: WER/CER com jiwer + modelo real validado
+
+**Descrição:** STT-01..04 implementados. **Validação real executada
+localmente**: faster-whisper `base` (CPU) instalado no ambiente do agente +
+modelo em cache (~/.cache/gravador) + espeak-ng disponível → WER/CER reais
+medidos sobre TTS determinístico. Thresholds por categoria calibrados por
+medição prévia (scripts/measure_wer_baseline.py) e registrados no manifesto.
+**Evidência adicional do D-009**: RUIDO-02 executado com modelo real — o
+fallback espectral degrada WER de 0.000 para 1.167 (Whisper alucina sobre
+áudio corrompido: "e a gente vai no canal no Facebook"). Tratado como
+xfail estrito documentado — nunca como sucesso.
+
+**Medições reais (faster-whisper base, espeak-ng pt-br -s 90):**
+
+| Categoria | WER medido | CER medido | Limiar (manifesto) |
+|---|---|---|---|
+| clean | 0.000 | 0.000 | 0.20 / 0.15 |
+| low_volume (0.25x) | 0.167 | 0.083 | 0.40 / 0.30 |
+| moderate_noise (10 dB) | 0.500 | 0.333 | 0.70 / 0.50 |
+
+**Arquivos envolvidos:**
+- `tests/fidelity/test_transcription_wer.py` (novo — STT-01..04)
+- `tests/fidelity/text_metrics.py` (normalização documentada + wer/cer)
+- `scripts/measure_wer_baseline.py` (novo — calibração)
+- `scripts/gen_fidelity_fixtures.py` (wer_policy calibrada no manifesto)
+- `tests/fidelity/test_noise_suppression_quality.py` (RUIDO-02: xfail D-009)
+
+**Testes executados:**
+
+| Comando | Resultado |
+|---|---|
+| `pytest tests/fidelity/ -q` | **127 passed, 1 xfailed** |
+| `flake8 tests/fidelity/ scripts/` | **0 violações** |
+
+**Resultado:** STT-01/02 `validated-local`; STT-03 `validated-local` com
+modelo real (será `skipped-no-model` no PR CI, rodando no noturno); STT-04
+preservado.

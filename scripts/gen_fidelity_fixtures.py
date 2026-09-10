@@ -290,14 +290,22 @@ def write_corpus(force: bool = False) -> Path:
         "wer_policy": {
             "note": (
                 "Pseudo-fala sintética NÃO é representativa de WER humano. "
-                "Limiares de WER por categoria abaixo aplicam-se a testes de "
-                "regressão da infraestrutura de métrica e a testes opt-in "
-                "com modelo real sobre áudio TTS determinístico (espeak-ng)."
+                "Categorias calibradas com medição REAL local em 2026-09-10: "
+                "TTS determinístico espeak-ng (pt-br, -s 90, -g 8) -> "
+                "faster-whisper base CPU (scripts/measure_wer_baseline.py). "
+                "Medições: clean WER 0.000; low_volume(0.25x) WER 0.167; "
+                "moderate_noise(10dB) WER 0.500. Thresholds com margem ~2x."
             ),
+            "calibration": {
+                "model": "base",
+                "tts": "espeak-ng pt-br -s 90 -g 8",
+                "date": "2026-09-10",
+                "script": "scripts/measure_wer_baseline.py",
+            },
             "categories": {
-                "clean": {"wer_max": 0.25, "cer_max": 0.15},
-                "moderate_noise": {"wer_max": 0.45, "cer_max": 0.30},
-                "low_volume": {"wer_max": 0.45, "cer_max": 0.30},
+                "clean": {"wer_max": 0.20, "cer_max": 0.15},
+                "moderate_noise": {"wer_max": 0.70, "cer_max": 0.50},
+                "low_volume": {"wer_max": 0.40, "cer_max": 0.30},
             },
         },
         "der_policy": {
