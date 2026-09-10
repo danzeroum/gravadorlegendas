@@ -118,6 +118,13 @@ class TestDia02RttmHarness:
 # DIA-01 — DER real com pyannote.metrics (extra diarization-metrics)
 # ---------------------------------------------------------------------------
 
+# pyannote.metrics emite UserWarning sobre aproximação de UEM quando não
+# há mapa de avaliação explícito — comportamento esperado da biblioteca
+# para avaliação de corpus completo; filtrado para manter o CI limpo.
+pytestmark_der = pytest.mark.filterwarnings(
+    "ignore:.*'uem' was approximated.*:UserWarning"
+)
+
 _pyannote_metrics = pytest.importorskip(
     "pyannote.metrics",
     reason=(
@@ -146,6 +153,7 @@ def compute_der(ref_segs, hyp_segs, collar=0.0):
     return float(metric(to_annotation(ref_segs), to_annotation(hyp_segs)))
 
 
+@pytestmark_der
 class TestDia01DerReal:
     """DER computado pela biblioteca real — transformações controladas.
 
