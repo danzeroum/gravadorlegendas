@@ -28,3 +28,33 @@ DECISOES.md, README.md, RELATORIO-EXECUCAO.md).
 | `pytest tests/ -q` (coleção completa) | **7 erros de coleção** preexistentes: `customtkinter`, `openai`, `transformers` ausentes no ambiente do agente — fora do escopo de áudio; não corrigidos (decisão documentada em RELATORIO-EXECUCAO.md) |
 
 **Resultado:** Fase 0 concluída sem alterações em código de produção.
+
+---
+
+## 2026-09-10 07:10 UTC — Fase 3: integridade de sinal e temporização
+
+**Descrição:** Testes FID-01..FID-10 implementados. Harness
+`tests/fidelity/fake_device.py` permite exercitar o loop de captura REAL do
+`PipewireCapture` (thread + conversão f32→s16le + fila + terminação de
+subprocesso) com device sintético, sem hardware — classificado como
+integração com código real (offline). 2 correções de teste durante o
+desenvolvimento: (1) comparação bit a bit precisa replicar a aritmética
+exata do pump (float32×32767 com truncamento, não round); (2) continuidade
+lógica exige entrada múltipla do chunk (pump descarta fragmento final —
+comportamento documentado do produto).
+
+**Arquivos envolvidos:**
+- `tests/fidelity/fake_device.py` (novo)
+- `tests/fidelity/conftest.py` (novo)
+- `tests/fidelity/test_capture_signal_integrity.py` (novo — FID-01..06)
+- `tests/fidelity/test_capture_timing.py` (novo — FID-04, 07..10)
+- `tests/fidelity/dsp_utils.py` (correção: rail-hit clipping fraction)
+
+**Testes executados:**
+
+| Comando | Resultado |
+|---|---|
+| `pytest tests/fidelity/ -q` | **33 passed** |
+| `flake8 tests/fidelity/ tests/fixtures/ scripts/gen_fidelity_fixtures.py` | **0 violações** |
+
+**Resultado:** FID-01..FID-10 com status `validated-local`.
