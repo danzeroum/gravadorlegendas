@@ -372,3 +372,22 @@ revalidada pós-mudança (ambiente reconstruído nas versões do
 congelamento): **197 passed, 2 skipped, 1 xfailed** — idêntica ao
 documentado; regressão de áudio **108/1** idêntica à baseline; flake8 0
 violações.
+
+---
+
+## 2026-09-10 10:32 UTC — Hardening de CI: versões pinadas no job fidelity (D-015)
+
+**Descrição:** `gen_fidelity_fixtures.py --check` compara bytes
+regenerados vs versionados; streams de `default_rng` e ULP de `sin` são
+estáveis apenas dentro das mesmas versões de libs. O job `fidelity`
+agora instala exatamente as versões do congelamento do corpus
+(numpy==2.1.3, scipy==1.14.1, soundfile==0.13.1) + `mkdir -p
+artifacts/fidelity` antes do `--junitxml`. Golden verify permanece
+robusto a versões (tolerâncias); apenas o --check exige ambiente
+idêntico — e agora o tem.
+
+**Resultado:** O runner do PR reproduz o ambiente de calibração local por
+completo; o --check vale como gate de reprodutibilidade byte a byte sem
+falso-positivo por drift de versão. Corpus revalidado: 100% regenerável;
+GOLDEN VERIFIED; secret scanning 0 achados. Branch agora CI-ready com 16
+commits — aguardando apenas a permissão Workflows (D-013) para o push.

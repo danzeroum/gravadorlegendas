@@ -456,3 +456,43 @@ com pyannote.metrics permanece no workflow noturno, por design das fases
 rastreável, nunca falha mascarada).
 
 **Reverter:** Remover o bloco `_FIDELITY_*` do `tests/conftest.py`.
+
+---
+
+## D-015 — Pin de numpy/scipy/soundfile no job `fidelity` do CI
+
+**Data:** 2026-09-10 (UTC)
+
+**Contexto:** `scripts/gen_fidelity_fixtures.py --check` valida que o
+corpus versionado é regenerável BYTE A BYTE (sha256). O gerador usa
+`np.random.default_rng` (o stream do Generator não é garantido estável
+entre versões de numpy, ao contrário do legacy RandomState congelado) e
+`np.sin` (variação ULP possível entre libm/plataformas) — o docstring do
+próprio gerador já condiciona o determinismo a "mesmas versões de
+numpy/scipy/soundfile". O runner instalaria versões mais novas que as do
+congelamento (local: numpy 2.1.3, scipy 1.14.1, soundfile 0.13.1) e o
+--check poderia falhar por drift de versão — falso positivo de regressão.
+
+**Decisão:** Fixar no job `fidelity` exatamente as versões do ambiente de
+congelamento (numpy==2.1.3, scipy==1.14.1, soundfile==0.13.1) e criar o
+diretório de artefato antes do `--junitxml` (`mkdir -p
+artifacts/fidelity`). Golden verify permanece robusto a versões por
+tolerâncias (0.05 dB RMS, 0.5 Hz pico; sha256 dos ARQUIVOS versionados,
+sem regeneração); apenas o --check exige ambiente idêntico — e agora o
+tem. Bônus: o runner do PR reproduz integralmente o ambiente local de
+calibração (reconstruído e revalidado nas mesmas versões: 197/2/1).
+
+**Alternativas:**
+- Enfraquecer o --check para propriedades/tolerâncias: rejeitado —
+  reduziria o rigor da alegação "100% regenerável byte a byte" documentada
+  no RELATORIO e na matriz.
+- Trocar `default_rng` pelo legacy `np.random.RandomState` (stream
+  congelado por compatibilidade): rejeitado agora — mudaria os bytes do
+  corpus existente e exigiria re-congelar o golden (ação `golden-regen`
+  deliberada); cabível em PR futura se o pin se tornar oneroso.
+
+**Consequências:** O --check no runner compara bytes gerados com as MESMAS
+versões do congelamento. Pin documentado no workflow com comentário
+apontando para esta decisão e para os docstrings dos geradores.
+
+**Reverter:** Remover os `==` do passo de instalação do job `fidelity`.
