@@ -264,3 +264,57 @@ documentado; regressões catastróficas do fallback são detectadas.
 
 **Reverter:** Ajustar budgets em `scripts/gen_fidelity_fixtures.py` (seção
 `budgets.noise`) e regenerar o manifesto.
+
+---
+
+## D-010 — CI de PR com dependências leves (`pip install -e . --no-deps`)
+
+**Data:** 2026-09-10 (UTC)
+
+**Contexto:** O job `fidelity` do CI de PR não precisa de torch,
+transformers, customtkinter nem openai (a suíte offline não os importa),
+mas precisa do pacote instalado para `import src.*`.
+
+**Decisão:** Job instala manualmente as deps leves (numpy, scipy,
+soundfile, PyYAML, jsonschema, jiwer, hypothesis, pytest, structlog,
+python-dotenv) + `pip install -e . --no-deps`. O job `test` existente
+(com `requirements.txt` completo) permanece inalterado.
+
+**Alternativas:**
+- `pip install -e ".[fidelity]"`: puxaria TODAS as deps de runtime
+  (torch ~2 GB) — rejeitado por tempo de pipeline de PR.
+- Extras auto-referentes (`dev>=0`): rejeitado — resolve pacote PyPI de
+  mesmo nome (risco de supply chain).
+
+**Consequências:** PR rápido (~1-2 min no job fidelity); risco baixo de
+divergência de deps (documentado: src.* importa apenas deps leves nos
+caminhos exercitados).
+
+**Reverter:** Remover job `fidelity` do ci.yml.
+
+---
+
+## D-011 — Secret scanning direcionado com adjudicação explícita
+
+**Data:** 2026-09-10 (UTC)
+
+**Contexto:** Regra de segurança exige varredura de segredos nos arquivos
+alterados antes de concluir. Padrões genéricos (hex 64+) geram falso
+positivo nos SHA-256 de fixtures dos manifests.
+
+**Decisão:** `scripts/secret_scan_changed_files.py` varre todos os
+arquivos alterados vs main com padrões reais (GitHub PAT classic/fine,
+gho_/ghr_, HF, OpenAI/Anthropic, AWS AKIA, blocos de private key,
+bearer longo, atribuições .env). Falsos positivos conhecidos são
+**adjudicados em código com justificativa** (sha256 de fixture nos dois
+manifests), não ignorados informalmente. O scanner nunca imprime o
+conteúdo suspeito — apenas arquivo+padrão.
+
+**Alternativas:**
+- gitleaks/trufflehog externos: adiado (requer instalação/CI dedicado);
+  o scanner interno cobre o requisito desta PR.
+
+**Consequências:** Varredura reproduzível localmente e no CI; resultado:
+0 achados não adjudicados (ver RELATORIO-EXECUCAO.md §10).
+
+**Reverter:** Remover o script.

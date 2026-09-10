@@ -277,3 +277,29 @@ FALHAS reais — skips são listados com motivo, nunca mascarados.
 
 **Resultado:** PERF `validated-local`; CI-01..03 `implemented` (validação
 plena ocorre na execução do PR — documentado na matriz).
+
+---
+
+## 2026-09-10 08:30 UTC — Fechamento: relatório final, matriz final e PR
+
+**Descrição:** Suíte completa executada e consolidada. Matriz
+PLANO-IMPLEMENTACAO.md atualizada com status final fiel (validated-local
+com evidências, implemented para CI aguardando execução no PR,
+skipped-no-model onde aplicável). RELATORIO-EXECUCAO.md finalizado com
+SHA, ambiente, métricas reais, classificação honesta real/mock, problemas
+e limitações. Secret scanning executado em todos os 55 arquivos
+alterados: **0 segredos** (20 SHA-256 de fixtures adjudicados como
+integridade deliberada). Decisões D-010/D-011 registradas.
+
+**Resultado final consolidado:**
+
+| Suíte | Resultado |
+|---|---|
+| Fidelidade offline (fidelity+golden+contracts+performance) | **197 passed, 2 skipped, 1 xfailed, 0 failed** |
+| Unitária de áudio existente (regressão) | **108 passed, 1 skipped** (= baseline) |
+| Integração (modelo base instalado) | **5 passed, 36 skipped** (3 STT reais ativados) |
+| Corpus determinístico | **100% regenerável byte a byte** |
+| Golden master | **VERIFIED**; freeze sem flag RECUSADO |
+| Relatório JSON | **válido contra schema** (200 testes, golden verified) |
+| Secret scanning | **0 segredos** (adjudicação formal de falsos positivos) |
+| flake8 (arquivos novos + src/) | **0 violações** |
