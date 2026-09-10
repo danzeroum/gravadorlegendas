@@ -157,3 +157,46 @@ xfail estrito documentado — nunca como sucesso.
 **Resultado:** STT-01/02 `validated-local`; STT-03 `validated-local` com
 modelo real (será `skipped-no-model` no PR CI, rodando no noturno); STT-04
 preservado.
+
+---
+
+## 2026-09-10 07:55 UTC — Fase 7: DER com pyannote.metrics real
+
+**Descrição:** DIA-01..03 implementados. **pyannote.metrics instalado e
+validado localmente SEM torch** — DER real computado sobre os RTTMs do
+corpus. Bandas calibradas por medição prévia
+(scripts/measure_der_baseline.py). **Achado metodológico documentado**:
+permutação consistente de labels → DER 0 (optimal label mapping do
+pyannote) — diarização é invariante a rebatimento consistente porque
+atribui IDs locais, não identidade de pessoa; confusão não-bijetiva
+(segmento rebatido para falante existente) é detectada (DER 0.18–0.44).
+Threshold ingênuo do manifesto (0.12 para shift) corrigido pelas bandas
+medidas. DIA-03 (diart real) marcado requires_hf_token, skip com motivo
+preciso (diart não instalado — árvore pesada).
+
+**Medições DER reais (pyannote.metrics, collar 0.0):**
+
+| Transformação | DER medido (4 cenários) | Banda no manifesto |
+|---|---|---|
+| cópia exata | 0.000 | 0.0 |
+| permutação consistente | 0.000 | 0.0 |
+| confusão não-bijetiva | 0.18–0.44 | > 0.10 |
+| shift global 500 ms | 0.43–0.62 | [0.30, 0.70] |
+| truncamento 20% | 0.21–0.56 | [0.15, 0.65] |
+| merge em 1 falante | 0.36–0.61 | [0.30, 0.65] |
+| hipótese vazia | 1.000 | 1.0 |
+
+**Arquivos envolvidos:**
+- `tests/fidelity/test_diarization_der.py` (novo — DIA-01..03)
+- `scripts/measure_der_baseline.py` (novo — calibração)
+- `scripts/gen_fidelity_fixtures.py` (der_policy com bandas medidas)
+
+**Testes executados:**
+
+| Comando | Resultado |
+|---|---|
+| `pytest tests/fidelity/test_diarization_der.py -q` | **33 passed, 1 skipped** (diart real — motivo preciso) |
+| `flake8 tests/fidelity/ scripts/` | **0 violações** |
+
+**Resultado:** DIA-01/02 `validated-local` (pyannote.metrics real); DIA-03
+`skipped-no-model` com harness pronto.

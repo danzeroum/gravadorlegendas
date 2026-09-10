@@ -115,7 +115,7 @@ def _build_signals() -> dict[str, dict]:
                        "sobreposição, com timeline conhecida e RTTM.",
         "timeline": TL_TWO_ALT,
         "rttm": "rttm/two_speakers_no_overlap.rttm",
-        "thresholds": {"der_exact_copy": 0.0, "der_time_shift_500ms_max": 0.12},
+        "thresholds": {"der_exact_copy": 0.0},
     }
 
     # -- 2 falantes com overlap ------------------------------------------
@@ -312,10 +312,27 @@ def write_corpus(force: bool = False) -> Path:
             "collar_s": 0.0,
             "overlap_policy": "padrão pyannote.metrics (overlap conta como "
                               "erro de confusão para hipótese com rótulo único)",
+            "label_mapping": (
+                "optimal mapping do pyannote.metrics: permutação CONSISTENTE "
+                "de labels é invariante (DER=0) — diarização identifica "
+                "'quem falou quando' com IDs locais, NÃO identifica pessoa "
+                "(voice enrollment/biometria está fora do escopo)."
+            ),
             "note": (
                 "DER sobre pseudo-fala valida harness/métrica/contrato — "
-                "não qualidade de embeddings em vozes humanas."
+                "não qualidade de embeddings em vozes humanas. Valores "
+                "calibrados por medição real local (2026-09-10, "
+                "scripts/measure_der_baseline.py, pyannote.metrics sem torch)."
             ),
+            "harness_expected": {
+                "exact_copy": 0.0,
+                "consistent_permutation": 0.0,
+                "non_bijective_confusion_min": 0.10,
+                "global_shift_500ms_band": [0.30, 0.70],
+                "truncation_20pct_band": [0.15, 0.65],
+                "single_speaker_merge_band": [0.30, 0.65],
+                "empty_hypothesis": 1.0,
+            },
         },
         "scenarios": entries,
     }
