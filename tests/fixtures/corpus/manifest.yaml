@@ -1,0 +1,281 @@
+schema: gravadorlegendas/corpus@1
+generator: tests/fixtures/signal_generators.py
+generator_version: 1
+regenerate: python scripts/gen_fidelity_fixtures.py
+sample_rate: 16000
+channels: 1
+canonical_format: pcm_s16le
+budgets:
+  noise:
+    note: 'Baseline fallback espectral: ruído puro atenuado -4.8 dB; fala+ruído DEGRADA -7.3 dB (questão
+      conhecida D-009); RNNoise real melhora SNR (validar onde instalado)'
+    noise_only_attenuation_min_db: 3.0
+    silence_out_rms_max: 0.0001
+    spectral_fallback_speech_snr_degradation_max_db: 12.0
+    rnnoise_speech_snr_improvement_min_db: 1.0
+  dual_track:
+    first_frame_drift_error_s: 0.005
+    equal_feed_sample_drift_s: 0.0
+    duration_tolerance_s: 0.03
+privacy: Todos os fixtures são sintéticos, gerados por código com seed explícita. Sem voz pessoal, reunião
+  real ou dado confidencial.
+wer_policy:
+  note: 'Pseudo-fala sintética NÃO é representativa de WER humano. Categorias calibradas com medição REAL
+    local em 2026-09-10: TTS determinístico espeak-ng (pt-br, -s 90, -g 8) -> faster-whisper base CPU
+    (scripts/measure_wer_baseline.py). Medições: clean WER 0.000; low_volume(0.25x) WER 0.167; moderate_noise(10dB)
+    WER 0.500. Thresholds com margem ~2x.'
+  calibration:
+    model: base
+    tts: espeak-ng pt-br -s 90 -g 8
+    date: '2026-09-10'
+    script: scripts/measure_wer_baseline.py
+  categories:
+    clean:
+      wer_max: 0.2
+      cer_max: 0.15
+    moderate_noise:
+      wer_max: 0.7
+      cer_max: 0.5
+    low_volume:
+      wer_max: 0.4
+      cer_max: 0.3
+der_policy:
+  collar_s: 0.0
+  overlap_policy: padrão pyannote.metrics (overlap conta como erro de confusão para hipótese com rótulo
+    único)
+  label_mapping: 'optimal mapping do pyannote.metrics: permutação CONSISTENTE de labels é invariante (DER=0)
+    — diarização identifica ''quem falou quando'' com IDs locais, NÃO identifica pessoa (voice enrollment/biometria
+    está fora do escopo).'
+  note: DER sobre pseudo-fala valida harness/métrica/contrato — não qualidade de embeddings em vozes humanas.
+    Valores calibrados por medição real local (2026-09-10, scripts/measure_der_baseline.py, pyannote.metrics
+    sem torch).
+  harness_expected:
+    exact_copy: 0.0
+    consistent_permutation: 0.0
+    non_bijective_confusion_min: 0.1
+    global_shift_500ms_band:
+    - 0.3
+    - 0.7
+    truncation_20pct_band:
+    - 0.15
+    - 0.65
+    single_speaker_merge_band:
+    - 0.3
+    - 0.65
+    empty_hypothesis: 1.0
+scenarios:
+- id: sine_1k
+  description: Senoide pura de 1 kHz, amplitude 0.5 — referência de pico espectral (FID-01) e RMS (FID-02).
+  path: audio/sine_1k.wav
+  seed: null
+  format: wav/pcm_s16le
+  sample_rate: 16000
+  channels: 1
+  duration_s: 3.0
+  sha256: 946127d137e83eca208cc151914e053b467dc774b935faeb4482b821359b4fc6
+  thresholds:
+    spectral_peak_hz_tol: 5.0
+    rms_db_tol: 1.0
+  license: synthetic-generated
+  origin: scripts/gen_fidelity_fixtures.py + tests/fixtures/signal_generators.py (determinístico)
+  transcription: null
+- id: clean_speech_like
+  description: Pseudo-fala limpa de 1 falante (f0=140 Hz, envelope de sílabas 4 Hz). Cenário base de fidelidade.
+  path: audio/clean_speech_like.wav
+  seed: 7
+  format: wav/pcm_s16le
+  sample_rate: 16000
+  channels: 1
+  duration_s: 5.0
+  sha256: 998438101a3e84279a3aaee646e04508d9c132c8c4904240283736953a91e60e
+  thresholds:
+    spectral_peak_hz_tol: 40.0
+  license: synthetic-generated
+  origin: scripts/gen_fidelity_fixtures.py + tests/fixtures/signal_generators.py (determinístico)
+  transcription: null
+- id: moderate_noise
+  description: Pseudo-fala + ruído branco gaussiano com SNR alvo de 10 dB — cenário de ruído moderado.
+  path: audio/moderate_noise.wav
+  seed: 7
+  format: wav/pcm_s16le
+  sample_rate: 16000
+  channels: 1
+  duration_s: 5.0
+  sha256: dd2e0e251452b8726c6b815f71e9cf91093f127b1f730de8c9e1f021e9b6f4a9
+  thresholds:
+    snr_target_db: 10.0
+    snr_tolerance_db: 1.5
+  license: synthetic-generated
+  origin: scripts/gen_fidelity_fixtures.py + tests/fixtures/signal_generators.py (determinístico)
+  transcription: null
+  noise_seed: 99
+- id: two_speakers_no_overlap
+  description: Dois pseudo-falantes alternados (110/180 Hz) sem sobreposição, com timeline conhecida e
+    RTTM.
+  path: audio/two_speakers_no_overlap.wav
+  seed: 101
+  format: wav/pcm_s16le
+  sample_rate: 16000
+  channels: 1
+  duration_s: 6.2
+  sha256: 7792ee447ada873b8bc0c1ecb182a2f23955f31f2d979a74a9189e02fce54ee5
+  thresholds:
+    der_exact_copy: 0.0
+  license: synthetic-generated
+  origin: scripts/gen_fidelity_fixtures.py + tests/fixtures/signal_generators.py (determinístico)
+  transcription: null
+  rttm: rttm/two_speakers_no_overlap.rttm
+  speakers:
+  - 0
+  - 1
+  timeline:
+  - speaker: 0
+    start: 0.0
+    end: 2.0
+  - speaker: 1
+    start: 2.2
+    end: 4.2
+  - speaker: 0
+    start: 4.4
+    end: 6.0
+- id: two_speakers_overlap
+  description: Dois pseudo-falantes com sobreposição deliberada (0.5 s + 0.2 s) — caso adversário de diarização.
+  path: audio/two_speakers_overlap.wav
+  seed: 202
+  format: wav/pcm_s16le
+  sample_rate: 16000
+  channels: 1
+  duration_s: 5.2
+  sha256: fdaf84d4771208e1442290dc5cda9b1b8cf1eb902bb9ff3aeeafd0106af147ed
+  thresholds:
+    der_exact_copy: 0.0
+  license: synthetic-generated
+  origin: scripts/gen_fidelity_fixtures.py + tests/fixtures/signal_generators.py (determinístico)
+  transcription: null
+  rttm: rttm/two_speakers_overlap.rttm
+  speakers:
+  - 0
+  - 1
+  timeline:
+  - speaker: 0
+    start: 0.0
+    end: 2.5
+  - speaker: 1
+    start: 2.0
+    end: 4.5
+  - speaker: 0
+    start: 4.3
+    end: 5.0
+- id: three_speakers
+  description: Três pseudo-falantes alternados (110/180/240 Hz) com timeline conhecida.
+  path: audio/three_speakers.wav
+  seed: 303
+  format: wav/pcm_s16le
+  sample_rate: 16000
+  channels: 1
+  duration_s: 8.2
+  sha256: 6be718ef748ed0716c0f3028fc42c5ff83c252b4a996a058d13b1f8778827b4a
+  thresholds:
+    der_exact_copy: 0.0
+  license: synthetic-generated
+  origin: scripts/gen_fidelity_fixtures.py + tests/fixtures/signal_generators.py (determinístico)
+  transcription: null
+  rttm: rttm/three_speakers.rttm
+  speakers:
+  - 0
+  - 1
+  - 2
+  timeline:
+  - speaker: 0
+    start: 0.0
+    end: 1.5
+  - speaker: 1
+    start: 1.7
+    end: 3.0
+  - speaker: 2
+    start: 3.2
+    end: 4.5
+  - speaker: 0
+    start: 4.7
+    end: 6.0
+  - speaker: 1
+    start: 6.1
+    end: 7.0
+  - speaker: 2
+    start: 7.2
+    end: 8.0
+- id: speaker_enter_exit
+  description: Falante 1 entra no meio da fala do falante 0; falante 0 sai e o 1 continua — entra/sai
+    de falante.
+  path: audio/speaker_enter_exit.wav
+  seed: 404
+  format: wav/pcm_s16le
+  sample_rate: 16000
+  channels: 1
+  duration_s: 6.2
+  sha256: 4f43630a83deee5c12bfeffa3935484aba941571345ac8722b75de81659b2d45
+  thresholds:
+    der_exact_copy: 0.0
+  license: synthetic-generated
+  origin: scripts/gen_fidelity_fixtures.py + tests/fixtures/signal_generators.py (determinístico)
+  transcription: null
+  rttm: rttm/speaker_enter_exit.rttm
+  speakers:
+  - 0
+  - 1
+  timeline:
+  - speaker: 0
+    start: 0.0
+    end: 2.0
+  - speaker: 1
+    start: 1.8
+    end: 3.8
+  - speaker: 0
+    start: 4.0
+    end: 4.6
+  - speaker: 1
+    start: 4.8
+    end: 6.0
+- id: clipped
+  description: Pseudo-fala clipada em ±0.25 (pico original 0.4) — distorção mensurável por fração de amostras
+    saturadas.
+  path: audio/clipped.wav
+  seed: 7
+  format: wav/pcm_s16le
+  sample_rate: 16000
+  channels: 1
+  duration_s: 5.0
+  sha256: d914ce56fe90a56ed668eba0e2a86e8ca519a4d833441c4d2de40aa5d394b584
+  thresholds:
+    clipped_fraction_min: 0.02
+  license: synthetic-generated
+  origin: scripts/gen_fidelity_fixtures.py + tests/fixtures/signal_generators.py (determinístico)
+  transcription: null
+- id: dropout
+  description: Pseudo-fala com 3 gaps (400/700/300 ms) — perda de dados de captura mensurável.
+  path: audio/dropout.wav
+  seed: 7
+  format: wav/pcm_s16le
+  sample_rate: 16000
+  channels: 1
+  duration_s: 5.0
+  sha256: 2f0ba5e446972d39fde350fe6690ddb4c4662235789f4489faace6bc8a7b5d49
+  thresholds:
+    silent_gap_count: 3
+  license: synthetic-generated
+  origin: scripts/gen_fidelity_fixtures.py + tests/fixtures/signal_generators.py (determinístico)
+  transcription: null
+- id: silence
+  description: Silêncio digital exato — baseline de RMS -inf e sem pico espectral.
+  path: audio/silence.wav
+  seed: null
+  format: wav/pcm_s16le
+  sample_rate: 16000
+  channels: 1
+  duration_s: 2.0
+  sha256: 20eaebffe1816e0ffa6f7f854f5ef4ea80d5349faaf0ce1fec1b713e7fde58fa
+  thresholds:
+    rms_max: 0.0
+  license: synthetic-generated
+  origin: scripts/gen_fidelity_fixtures.py + tests/fixtures/signal_generators.py (determinístico)
+  transcription: null

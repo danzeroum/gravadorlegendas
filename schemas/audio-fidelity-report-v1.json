@@ -1,0 +1,178 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gravadorlegendas/audio-fidelity-report/v1",
+  "title": "Relatório de Fidelidade de Áudio (v1)",
+  "description": "Contrato do relatório JSON consolidado gerado por scripts/build_fidelity_report.py e publicado como artefato de CI. Nenhum campo sensível (tokens, caminhos locais de usuário) é permitido.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "environment",
+    "summary",
+    "results",
+    "limitations"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "generated_at": {
+      "type": "string",
+      "description": "Timestamp UTC ISO-8601",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}"
+    },
+    "commit_sha": {
+      "type": ["string", "null"],
+      "description": "SHA do commit quando disponível (7-40 hex); null fora de repositório",
+      "pattern": "^[0-9a-f]{7,40}$"
+    },
+    "environment": {
+      "type": "object",
+      "required": ["platform", "python_version"],
+      "additionalProperties": true,
+      "properties": {
+        "platform": {
+          "type": "string",
+          "description": "platform.platform() resumido — SEM informações sensíveis"
+        },
+        "python_version": {
+          "type": "string"
+        },
+        "libraries": {
+          "type": "object",
+          "description": "Versões de bibliotecas relevantes (numpy, scipy, soundfile, jiwer...)",
+          "additionalProperties": {"type": "string"}
+        },
+        "cpu_count": {
+          "type": ["integer", "null"]
+        },
+        "audio_backends_available": {
+          "type": "object",
+          "description": "Disponibilidade de backends/recursos (pw-record, pyaudio, espeak-ng, modelo whisper, pyannote.metrics) — booleanos/versões, nunca caminhos nem tokens",
+          "additionalProperties": {"type": ["boolean", "string"]}
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total", "passed", "failed", "skipped", "xfailed"],
+      "additionalProperties": false,
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "passed": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0},
+        "skipped": {"type": "integer", "minimum": 0},
+        "xfailed": {"type": "integer", "minimum": 0},
+        "error": {"type": "integer", "minimum": 0},
+        "duration_s": {
+          "type": ["number", "null"],
+          "description": "Duração total da suíte quando conhecida"
+        }
+      }
+    },
+    "golden": {
+      "type": "object",
+      "required": ["status"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": ["verified", "drifted", "not-run"],
+          "description": "Resultado do golden master verify"
+        },
+        "n_scenarios": {"type": "integer", "minimum": 0},
+        "diffs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["scenario", "metric", "expected", "measured"],
+            "additionalProperties": false,
+            "properties": {
+              "scenario": {"type": "string"},
+              "metric": {"type": "string"},
+              "expected": {"type": ["string", "number", "null"]},
+              "measured": {"type": ["string", "number", "null"]}
+            }
+          }
+        }
+      }
+    },
+    "results": {
+      "type": "array",
+      "description": "Um item por teste executado",
+      "items": {
+        "type": "object",
+        "required": ["test_id", "test_name", "status", "category"],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {"status": {"const": "skipped"}},
+              "required": ["status"]
+            },
+            "then": {
+              "description": "Skip exige motivo rastreável não-vazio — honestidade estrutural",
+              "properties": {
+                "skip_reason": {"type": "string", "minLength": 1}
+              },
+              "required": ["skip_reason"]
+            }
+          }
+        ],
+        "properties": {
+          "test_id": {
+            "type": "string",
+            "description": "Node-id do pytest ou ID sintético do relatório"
+          },
+          "test_name": {
+            "type": "string",
+            "description": "Nome curto (classe::teste)"
+          },
+          "status": {
+            "enum": ["passed", "failed", "skipped", "xfailed", "error"]
+          },
+          "category": {
+            "enum": [
+              "sintetico-offline",
+              "integracao-real-lib",
+              "hardware-loopback",
+              "requer-modelo-hf",
+              "requer-token-hf",
+              "indisponivel-runner"
+            ],
+            "description": "Classificação honesta do que o teste exige"
+          },
+          "metrics": {
+            "type": ["object", "null"],
+            "description": "Métricas observadas quando aplicável (wer, cer, der, snr_db...)",
+            "additionalProperties": {"type": ["number", "string", "null"]}
+          },
+          "thresholds": {
+            "type": ["object", "null"],
+            "description": "Limiares aplicados (do manifesto)"
+          },
+          "skip_reason": {
+            "type": ["string", "null"],
+            "description": "Motivo rastreável do skip — obrigatório quando status=skipped"
+          },
+          "duration_s": {
+            "type": ["number", "null"]
+          }
+        }
+      }
+    },
+    "metrics_summary": {
+      "type": "object",
+      "description": "Resumo das métricas observadas nesta execução",
+      "additionalProperties": {
+        "type": ["number", "string", "null"]
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Limitações declaradas da execução (nunca vazia — honestidade primeiro)",
+      "items": {"type": "string"}
+    }
+  }
+}

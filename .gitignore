@@ -62,3 +62,7 @@ Thumbs.db
 *.egg-info/
 build/
 dist/
+
+# Relatórios de fidelidade de execução LOCAL — nunca commitados.
+# O CI publica os relatórios como artifacts (workflow), não no Git.
+artifacts/fidelity/

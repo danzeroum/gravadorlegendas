@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# Princípio do menor privilégio: apenas leitura do repositório.
+# Nenhum job de teste precisa de token de escrita.
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -39,3 +44,60 @@ jobs:
         run: pytest tests/ -v --cov=src
         env:
           TESSERACT_PATH: /usr/bin/tesseract
+
+  # -----------------------------------------------------------------------
+  # Suíte de fidelidade de áudio (offline): sem hardware, sem token HF,
+  # sem download de modelo, sem PipeWire/WASAPI. Job rápido (~1-2 min)
+  # que valida integridade, contratos, metamórficos, fuzzing limitado
+  # (max_examples=25), golden verify e publica o relatório JSON de
+  # qualidade como artefato. Testes que exigem recursos reais fazem
+  # skip EXPLÍCITO com motivo rastreável (ver relatório) — nunca
+  # sucesso simulado.
+  # -----------------------------------------------------------------------
+  fidelity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install fidelity dependencies (leves, pinadas — D-015)
+        run: |
+          # Versões PINADAS às do congelamento do corpus (2026-09-10):
+          # numpy 2.1.3 / scipy 1.14.1 / soundfile 0.13.1. O --check do
+          # gerador compara BYTES regenerados vs versionados; streams de
+          # default_rng e ULP de sin são estáveis apenas dentro das mesmas
+          # versões (docstring de tests/fixtures/signal_generators.py e
+          # DECISOES.md D-015). Golden verify usa tolerâncias — robusto a
+          # versões; apenas o --check exige ambiente idêntico ao congelamento.
+          pip install pytest pytest-cov jiwer hypothesis \
+            PyYAML jsonschema structlog python-dotenv \
+            numpy==2.1.3 scipy==1.14.1 soundfile==0.13.1
+          # Instala o pacote sem as deps pesadas de runtime (torch,
+          # transformers, customtkinter) — a suíte offline não as usa.
+          pip install -e . --no-deps
+      - name: Verify deterministic corpus regenerability
+        run: python scripts/gen_fidelity_fixtures.py --check
+      - name: Golden master verify
+        run: python scripts/fidelity_golden.py verify
+      - name: Run offline fidelity suite
+        run: |
+          mkdir -p artifacts/fidelity
+          pytest tests/fidelity tests/golden tests/contracts tests/performance \
+            -q -p no:cacheprovider \
+            --junitxml=artifacts/fidelity/junit.xml
+      - name: Build consolidated quality report (JSON)
+        if: always()
+        run: |
+          python scripts/build_fidelity_report.py \
+            --output artifacts/fidelity/report.json \
+            --from-junit artifacts/fidelity/junit.xml
+      - name: Upload fidelity report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-fidelity-report
+          path: artifacts/fidelity/
+          retention-days: 30
+          if-no-files-found: error
