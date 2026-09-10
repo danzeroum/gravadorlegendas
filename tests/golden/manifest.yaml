@@ -1,0 +1,106 @@
+frozen_at: '2026-09-10T07:37:22+00:00'
+generator: tests/fixtures/signal_generators.py
+generator_version: 1
+policy: Golden guarda SOMENTE medições estáveis (sha256, samples, duração, RMS dBFS, pico espectral, DC
+  offset, clipping). Wall-clock/jitter NUNCA são congelados. Tolerâncias por métrica derivadas de variância
+  numérica float64/FFT — calibração no manifesto do corpus.
+regenerate: python scripts/fidelity_golden.py freeze --confirm-golden-regen
+scenarios:
+  clean_speech_like:
+    clipped_fraction: 1.3e-05
+    dc_offset: -3.3e-05
+    duration_s: 5.0
+    n_samples: 80000
+    rms_dbfs: -20.0143
+    sample_rate: 16000
+    sha256: 998438101a3e84279a3aaee646e04508d9c132c8c4904240283736953a91e60e
+    spectral_peak_hz: 137.39
+  clipped:
+    clipped_fraction: 0.042775
+    dc_offset: -2.6e-05
+    duration_s: 5.0
+    n_samples: 80000
+    rms_dbfs: -20.4298
+    sample_rate: 16000
+    sha256: d914ce56fe90a56ed668eba0e2a86e8ca519a4d833441c4d2de40aa5d394b584
+    spectral_peak_hz: 137.39
+  dropout:
+    clipped_fraction: 1.3e-05
+    dc_offset: 8.0e-06
+    duration_s: 5.0
+    n_samples: 80000
+    rms_dbfs: -21.3981
+    sample_rate: 16000
+    sha256: 2f0ba5e446972d39fde350fe6690ddb4c4662235789f4489faace6bc8a7b5d49
+    spectral_peak_hz: 137.41
+  moderate_noise:
+    clipped_fraction: 1.3e-05
+    dc_offset: -0.000108
+    duration_s: 5.0
+    n_samples: 80000
+    rms_dbfs: -19.6025
+    sample_rate: 16000
+    sha256: dd2e0e251452b8726c6b815f71e9cf91093f127b1f730de8c9e1f021e9b6f4a9
+    spectral_peak_hz: 137.39
+  silence:
+    clipped_fraction: 0.0
+    dc_offset: 0.0
+    duration_s: 2.0
+    n_samples: 32000
+    rms_dbfs: null
+    sample_rate: 16000
+    sha256: 20eaebffe1816e0ffa6f7f854f5ef4ea80d5349faaf0ce1fec1b713e7fde58fa
+    spectral_peak_hz: null
+  sine_1k:
+    clipped_fraction: 0.125
+    dc_offset: 0.0
+    duration_s: 3.0
+    n_samples: 48000
+    rms_dbfs: -9.0311
+    sample_rate: 16000
+    sha256: 946127d137e83eca208cc151914e053b467dc774b935faeb4482b821359b4fc6
+    spectral_peak_hz: 1000.0
+  speaker_enter_exit:
+    clipped_fraction: 1.0e-05
+    dc_offset: 0.000221
+    duration_s: 6.2
+    n_samples: 99200
+    rms_dbfs: -20.996
+    sample_rate: 16000
+    sha256: 4f43630a83deee5c12bfeffa3935484aba941571345ac8722b75de81659b2d45
+    spectral_peak_hz: 177.35
+  three_speakers:
+    clipped_fraction: 5.3e-05
+    dc_offset: 0.000114
+    duration_s: 8.2
+    n_samples: 131200
+    rms_dbfs: -21.1421
+    sample_rate: 16000
+    sha256: 6be718ef748ed0716c0f3028fc42c5ff83c252b4a996a058d13b1f8778827b4a
+    spectral_peak_hz: 111.25
+  two_speakers_no_overlap:
+    clipped_fraction: 4.0e-05
+    dc_offset: 0.000192
+    duration_s: 6.2
+    n_samples: 99200
+    rms_dbfs: -21.2113
+    sample_rate: 16000
+    sha256: 7792ee447ada873b8bc0c1ecb182a2f23955f31f2d979a74a9189e02fce54ee5
+    spectral_peak_hz: 177.38
+  two_speakers_overlap:
+    clipped_fraction: 1.2e-05
+    dc_offset: 8.4e-05
+    duration_s: 5.2
+    n_samples: 83200
+    rms_dbfs: -20.6174
+    sample_rate: 16000
+    sha256: fdaf84d4771208e1442290dc5cda9b1b8cf1eb902bb9ff3aeeafd0106af147ed
+    spectral_peak_hz: 177.38
+schema: gravadorlegendas/golden@1
+tolerances:
+  clipped_fraction_abs: 1.0e-05
+  dc_offset_abs: 1.0e-05
+  n_samples: 0
+  rms_dbfs: 0.05
+  sha256: exact
+  spectral_peak_hz: 0.5

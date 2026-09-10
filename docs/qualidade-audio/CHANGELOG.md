@@ -200,3 +200,45 @@ preciso (diart não instalado — árvore pesada).
 
 **Resultado:** DIA-01/02 `validated-local` (pyannote.metrics real); DIA-03
 `skipped-no-model` com harness pronto.
+
+---
+
+## 2026-09-10 08:05 UTC — Fase 8: golden master e relatório JSON
+
+**Descrição:** GOLD-01..02 e REP-01..02 implementados. Golden master
+congelado com medições estáveis apenas (sha256, samples, duração, RMS
+dBFS, pico espectral, DC offset, clipping — nunca wall-clock/jitter).
+`freeze` recusa sem `--confirm-golden-regen` (testado como contrato).
+`verify` detecta adulteração (teste negativo: RMS +1 dB é pego). Achado
+menor documentado: senoide pura tem 1/8 das amostras no pico (dwell
+natural, não clipping) — detector de rail-hit calibrado no teste. Schema
+versionado `schemas/audio-fidelity-report-v1.json` com if-then exigindo
+skip_reason não-vazio para skips. Relatório real gerado e validado.
+
+**Relatório real da execução local (artefato não versionado):**
+- total=188, passed=186, skipped=1 (DIA-03: diart ausente — motivo preciso),
+  xfailed=1 (RUIDO-02: D-009), failed=0, golden=verified
+- metrics_summary: sine_peak=1000.0 Hz, sine_rms=-9.03 dBFS,
+  clipped_rail=0.0428, SNR fixture=10.0 dB; WER/CER/DER humanos=null
+  (limitação declarada — dependem de modelo/token)
+
+**Arquivos envolvidos:**
+- `scripts/fidelity_golden.py` (novo — verify/freeze com guarda)
+- `tests/golden/manifest.yaml` (novo — baseline congelada, 10 cenários)
+- `tests/golden/test_capture_golden_master.py` (novo — GOLD-01..02)
+- `schemas/audio-fidelity-report-v1.json` (novo — contrato do relatório)
+- `scripts/build_fidelity_report.py` (novo — gerador + validação)
+- `tests/contracts/test_audio_fidelity_report_schema.py` (novo — REP-01..02)
+- `.gitignore` (+ artifacts/fidelity/)
+
+**Testes executados:**
+
+| Comando | Resultado |
+|---|---|
+| `pytest tests/golden/ tests/contracts/ -q` | **26 passed** |
+| `python scripts/fidelity_golden.py verify` | **GOLDEN VERIFIED** |
+| `python scripts/fidelity_golden.py freeze` (sem flag) | **RECUSADO (exit 1)** — guarda funciona |
+| `python scripts/build_fidelity_report.py --output artifacts/fidelity/report.json` | **relatório válido** (188 testes) |
+| `flake8 scripts/ tests/golden/ tests/contracts/` | **0 violações** |
+
+**Resultado:** GOLD/REP com status `validated-local`.
