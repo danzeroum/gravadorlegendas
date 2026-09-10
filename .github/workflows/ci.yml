@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# Princípio do menor privilégio: apenas leitura do repositório.
+# Nenhum job de teste precisa de token de escrita.
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -39,3 +44,51 @@ jobs:
         run: pytest tests/ -v --cov=src
         env:
           TESSERACT_PATH: /usr/bin/tesseract
+
+  # -----------------------------------------------------------------------
+  # Suíte de fidelidade de áudio (offline): sem hardware, sem token HF,
+  # sem download de modelo, sem PipeWire/WASAPI. Job rápido (~1-2 min)
+  # que valida integridade, contratos, metamórficos, fuzzing limitado
+  # (max_examples=25), golden verify e publica o relatório JSON de
+  # qualidade como artefato. Testes que exigem recursos reais fazem
+  # skip EXPLÍCITO com motivo rastreável (ver relatório) — nunca
+  # sucesso simulado.
+  # -----------------------------------------------------------------------
+  fidelity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install fidelity dependencies (leves)
+        run: |
+          pip install pytest pytest-cov jiwer hypothesis scipy \
+            soundfile numpy PyYAML jsonschema structlog python-dotenv
+          # Instala o pacote sem as deps pesadas de runtime (torch,
+          # transformers, customtkinter) — a suíte offline não as usa.
+          pip install -e . --no-deps
+      - name: Verify deterministic corpus regenerability
+        run: python scripts/gen_fidelity_fixtures.py --check
+      - name: Golden master verify
+        run: python scripts/fidelity_golden.py verify
+      - name: Run offline fidelity suite
+        run: |
+          pytest tests/fidelity tests/golden tests/contracts tests/performance \
+            -q -p no:cacheprovider \
+            --junitxml=artifacts/fidelity/junit.xml
+      - name: Build consolidated quality report (JSON)
+        if: always()
+        run: |
+          python scripts/build_fidelity_report.py \
+            --output artifacts/fidelity/report.json \
+            --from-junit artifacts/fidelity/junit.xml
+      - name: Upload fidelity report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-fidelity-report
+          path: artifacts/fidelity/
+          retention-days: 30
+          if-no-files-found: error

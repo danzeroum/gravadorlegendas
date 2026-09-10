@@ -242,3 +242,38 @@ skip_reason não-vazio para skips. Relatório real gerado e validado.
 | `flake8 scripts/ tests/golden/ tests/contracts/` | **0 violações** |
 
 **Resultado:** GOLD/REP com status `validated-local`.
+
+---
+
+## 2026-09-10 08:15 UTC — Fase 9: performance e CI
+
+**Descrição:** PERF-01..02 e CI-01..03 implementados. Latência p95
+determinística via FakeClock injetado no `LatencyTracker` REAL do produto
+(gaps conhecidos ⇒ p95 exato, zero flakiness) + smoke budget real por
+chunk (mixer + filtro: p95 medido 0.12 ms, budget generoso 100 ms,
+configurável para produção via `FIDELITY_P95_BUDGET_MS` no job
+noturno). CI de PR ganha job `fidelity` (~1-2 min): deps leves sem
+torch (`pip install -e . --no-deps`), corpus regenerável, golden verify,
+suíte offline completa e relatório JSON como artefato. Workflow separado
+`audio-fidelity.yml` (dispatch + noturno 03:00 UTC) para STT real
+(modelo base), espeak-ng, pyannote.metrics e diart com HF_TOKEN por
+referência de secret. Gate de resumo honesto: job falha somente com
+FALHAS reais — skips são listados com motivo, nunca mascarados.
+
+**Arquivos envolvidos:**
+- `tests/performance/test_capture_latency_budget.py` (novo — PERF-01..02)
+- `tests/conftest.py` (fixtures de corpus compartilhadas)
+- `.github/workflows/ci.yml` (job `fidelity` + permissions mínimas)
+- `.github/workflows/audio-fidelity.yml` (novo — real/noturno)
+
+**Testes executados:**
+
+| Comando | Resultado |
+|---|---|
+| `pytest tests/fidelity tests/golden tests/contracts tests/performance -q` | **197 passed, 2 skipped, 1 xfailed** |
+| `pytest tests/test_audio_*.py ...` (regressão) | **73 passed** |
+| `flake8` (meus arquivos + src/) | **0 violações** |
+| YAML workflows | **válido em ambos** |
+
+**Resultado:** PERF `validated-local`; CI-01..03 `implemented` (validação
+plena ocorre na execução do PR — documentado na matriz).
