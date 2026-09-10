@@ -86,3 +86,34 @@ WasapiLoopbackCapture.start() sem PyAudio não propaga erro ao chamador.
 | `flake8 tests/fidelity/ tests/fixtures/ scripts/` | **0 violações** |
 
 **Resultado:** CONF/MET/FUZZ com status `validated-local`.
+
+---
+
+## 2026-09-10 07:30 UTC — Fase 5: dual-track e supressão de ruído
+
+**Descrição:** SYNC-01..03 e RUIDO-01..02 implementados. Drift dual-track
+testado com FakeClock injetado (determinismo sem sleeps). **Achado
+importante (D-009)**: baseline medido localmente mostra que o fallback
+espectral do RNNoiseFilter DEGRADA o SNR de fala+ruído em ~7.3 dB e o sinal
+limpo cai a ~3.2 dB — o gate de silêncio e a atenução de ruído puro (−4.8 dB)
+funcionam. Budgets calibrados a partir dessas medições (tripwire de 12 dB),
+nunca impostos sem medição prévia. pyrnnoise não instalável no agente —
+caminho RNNoise real fica opt-in com skip explícito.
+
+**Arquivos envolvidos:**
+- `tests/fidelity/test_dual_track_sync.py` (novo — SYNC-01..03)
+- `tests/fidelity/test_noise_suppression_quality.py` (novo — RUIDO-01..02)
+- `tests/fidelity/text_metrics.py` (novo — utilitário WER/CER compartilhado)
+- `scripts/measure_noise_baseline.py` (novo — calibração de budgets)
+- `scripts/gen_fidelity_fixtures.py` (budgets no manifesto)
+- `docs/qualidade-audio/DECISOES.md` (D-009)
+
+**Testes executados:**
+
+| Comando | Resultado |
+|---|---|
+| `pytest tests/fidelity/test_dual_track_sync.py tests/fidelity/test_noise_suppression_quality.py -q` | **16 passed, 1 skipped** (faster-whisper ausente — motivo preciso) |
+| `python scripts/measure_noise_baseline.py` | baseline SNR registrado (D-009) |
+
+**Resultado:** SYNC/RUIDO com status `validated-local` (RUIDO-02:
+`skipped-no-model` no agente, infraestrutura pronta).

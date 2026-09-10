@@ -232,3 +232,35 @@ ambiente do agente (Linux, sem PyAudio/hardware).
 fluxo Windows documentado); issue recomendada para PR dedicada.
 
 **Reverter:** N/A (registro de comportamento, sem mudança de código).
+
+---
+
+## D-009 — Achado: fallback espectral degrada SNR de fala; budgets como tripwire
+
+**Data:** 2026-09-10 (UTC)
+
+**Contexto:** Medição de baseline local (scripts/measure_noise_baseline.py)
+antes de fixar qualquer budget de SNR (regra do plano): o fallback espectral
+do `RNNoiseFilter` (ativado quando pyrnnoise/rnnoise-wrapper não estão
+instalados) **degrada** o SNR de fala+ruído @10 dB em ~7.3 dB e reduz o SNR
+do sinal limpo a ~3.2 dB. O que funciona: gate de silêncio (saída ~0) e
+atenuação de ruído puro (−4.8 dB). Causa provável: spectral subtraction sem
+overlap-add, com compensação de janela agressiva.
+
+**Decisão:** NÃO fingir qualidade: o teste RUIDO-01 mede e reporta o SNR
+real e adota gates honestos por backend — RNNoise real deve melhorar ≥1 dB
+(opt-in); fallback espectral é monitorado por tripwire de regressão
+(degradação ≤ 12 dB, baseline medido 7.3). Registrar a limitação como
+questão conhecida e recomendar RNNoise nativo em produção.
+
+**Alternativas:**
+- Assumir "filtro melhora SNR" como gate universal: rejeitado — falharia
+  de imediato no fallback e esconderia o achado.
+- Corrigir o fallback nesta PR: rejeitado — mudança de algoritmo de
+  produção fora do escopo da suíte de testes.
+
+**Consequências:** CI não fica vermelho por comportamento preexistente
+documentado; regressões catastróficas do fallback são detectadas.
+
+**Reverter:** Ajustar budgets em `scripts/gen_fidelity_fixtures.py` (seção
+`budgets.noise`) e regenerar o manifesto.

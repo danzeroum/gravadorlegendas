@@ -262,6 +262,27 @@ def write_corpus(force: bool = False) -> Path:
         "sample_rate": SAMPLE_RATE,
         "channels": 1,
         "canonical_format": "pcm_s16le",
+        # Budgets calibrados por baseline local medido em 2026-09-10
+        # (scripts/measure_noise_baseline.py + testes SYNC com FakeClock):
+        # NUNCA impor budget sem medição prévia (regra do plano).
+        "budgets": {
+            "noise": {
+                "note": (
+                    "Baseline fallback espectral: ruído puro atenuado "
+                    "-4.8 dB; fala+ruído DEGRADA -7.3 dB (questão conhecida "
+                    "D-009); RNNoise real melhora SNR (validar onde instalado)"
+                ),
+                "noise_only_attenuation_min_db": 3.0,
+                "silence_out_rms_max": 1.0e-4,
+                "spectral_fallback_speech_snr_degradation_max_db": 12.0,
+                "rnnoise_speech_snr_improvement_min_db": 1.0,
+            },
+            "dual_track": {
+                "first_frame_drift_error_s": 0.005,
+                "equal_feed_sample_drift_s": 0.0,
+                "duration_tolerance_s": 0.03,
+            },
+        },
         "privacy": (
             "Todos os fixtures são sintéticos, gerados por código com seed "
             "explícita. Sem voz pessoal, reunião real ou dado confidencial."
