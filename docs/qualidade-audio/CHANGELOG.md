@@ -420,3 +420,32 @@ este CHANGELOG.
 **Resultado:** Bloqueio D-012/D-013 encerrado sem contorno e com
 rastreabilidade completa. Sequência final liberada: PR → revisão
 Copilot → issue #4 → CI do PR → adendo §12.
+
+---
+
+## 2026-09-10 15:15 UTC — CI da PR #5 verde; fechamento da entrega (§12)
+
+**Descrição:** O workflow CI executou na PR #5 (run `34493659033`,
+evento `pull_request`, head `572d226`) com conclusão `success`:
+
+- `lint`: success.
+- `test`: **272 passed, 40 skipped, 0 failed** — guarda D-014 confirmada
+  no runner real (header do pytest declara as suítes de fidelidade fora
+  da coleção e o job `fidelity` como dono delas).
+- `fidelity`: **161 passed, 6 skipped, 0 failed, 0 xfailed (total 167)
+  em 6,67 s** — corpus 100% regenerável e GOLDEN VERIFIED reproduzidos
+  no runner; 6 skips com motivo preciso (pyannote 1, espeak-ng 4,
+  silero-vad 1); artefato `audio-fidelity-report` (11,4 KB) publicado.
+- Números divergentes do local (197/2/1) por design: coleção condicional
+  e skips honestos no ambiente do PR; noturno cobre o restante.
+
+Copilot review solicitado 2× via API (201 aceito; bot não engaja —
+requer habilitação do recurso nas configurações do repo pelo
+mantenedor). Issue #4 encerrada como concluída com comentário final.
+
+**Arquivos envolvidos:** `docs/qualidade-audio/RELATORIO-EXECUCAO.md`
+(adendo §12), este CHANGELOG.
+
+**Resultado:** PR #5 completa: 18 commits, CI verde nos três jobs,
+artefato publicado, issue de bloqueio encerrada, trilha de auditoria
+D-001..D-016 íntegra. Merge a critério do mantenedor.

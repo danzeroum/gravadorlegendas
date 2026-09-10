@@ -215,3 +215,46 @@ job `test` verde (suíte do produto + guarda D-014); job `fidelity`
 verde com ~164 passed/2 skipped/1 xfailed — DER sai da coleção por
 `pyannote.metrics` ausente no runner (por design; o noturno
 `audio-fidelity.yml` cobre com pyannote + whisper reais).
+
+## 12. Adendo — CI da PR #5: verificado e verde (fechamento)
+
+**2026-09-10 15:15 UTC.** A PR #5
+(https://github.com/danzeroum/gravadorlegendas/pull/5) executou o
+workflow **CI** no evento `pull_request` — run `34493659033`, head
+`572d226` — com **conclusão `success`**: os três jobs verdes.
+
+| Job | Resultado | Detalhe real do runner |
+|---|---|---|
+| `lint` | success | flake8 sem violações |
+| `test` | success | **272 passed, 40 skipped, 0 failed** (suíte do produto; guarda D-014 ativa — o header do pytest declara: "fidelity: deps opcionais ausentes … suítes fidelity/golden/contracts/performance fora da coleção nesta execução; dono delas é o job `fidelity` do CI") |
+| `fidelity` | success | **161 passed, 6 skipped, 0 failed, 0 xfailed (total 167) em 6,67 s**; corpus **100% regenerável** e **GOLDEN VERIFIED** reproduzidos no runner; artefato `audio-fidelity-report` (11,4 KB) publicado |
+
+Os 6 skips do job `fidelity` carregam motivo preciso (política honesta,
+log do runner): `pyannote.metrics` ausente — DER real (1); `espeak-ng`
+ausente — TTS determinístico para WER (4); `silero-vad` ausente — etapa
+VAD de latência (1). O xfail RUIDO-02 (D-009) não aparece no runner
+porque exige faster-whisper — coberto pelo noturno `audio-fidelity.yml`,
+que instala whisper + espeak-ng + pyannote.
+
+**Local vs runner (números diferem por design, não por falha):** local
+197 passed/2 skipped/1 xfailed vs runner 161/6/0. A diferença decorre
+exclusivamente da coleção condicional (D-014) e dos skips honestos no
+ambiente do PR — sem `pyannote.metrics`, `espeak-ng`, `faster-whisper`
+ou `torch`, os testes que os exigem saem da coleção ou pulam com motivo.
+Em nenhum dos ambientes houve falha; o noturno cobre o que o PR não
+executa.
+
+**Copilot review:** solicitado via API em duas tentativas (HTTP 201
+aceito), porém o bot não assume a revisão — o recurso "Copilot code
+review" precisa ser habilitado pelo mantenedor em Settings → Copilot →
+Code review. Ação opcional; a revisão humana permanece o gate real.
+
+**Issue #4:** encerrada como concluída, com comentário final contendo a
+tabela de verificação pós-push e o link da PR (ciclo D-012 → D-013 →
+D-016 completo, sem contorno).
+
+**Estado final da entrega:** PR #5 aberta com 18 commits e CI verde nos
+três jobs; artefato de qualidade publicado; trilha de auditoria completa
+(D-001..D-016, CHANGELOG, este relatório). Pendências conscientes do
+mantenedor: revisar/mergear a PR #5; (opcional) habilitar Copilot code
+review; (opcional) configurar o secret `HF_TOKEN` para o noturno real.
