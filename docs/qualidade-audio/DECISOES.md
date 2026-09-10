@@ -408,3 +408,51 @@ permanece pronto e verificado. Resolução será registrada em adendo datado
 do RELATORIO-EXECUCAO.md quando ocorrer.
 
 **Reverter:** N/A (registro de bloqueio).
+
+---
+
+## D-014 — Coleção graciosa da suíte de fidelidade sem deps opcionais
+
+**Data:** 2026-09-10 (UTC)
+
+**Contexto:** O job `test` do CI instala apenas `requirements.txt`
+(numpy/PyYAML chegam transitivamente via transformers; scipy, soundfile,
+hypothesis, jiwer e jsonschema NÃO). Os módulos das suítes novas importam
+essas deps no nível de módulo (hypothesis em fuzz/WER; soundfile em
+integridade sinal e via `scripts.fidelity_golden` no golden) ou em
+runtime via import lazy (scipy em `sg.resample` usado por MET-03;
+jsonschema no validador usado pelos contratos). Evidência red→green em
+ambiente simulado do job `test` (venv sem as deps opcionais):
+
+- **Antes:** 4 erros de coleta (`hypothesis`×2, `soundfile`×2) + 3
+  falhas de runtime em MET-03 (`scipy` lazy em `resample_poly`); 98
+  testes coletados que falhariam parcialmente em runtime.
+- **Depois:** 0 erros; as 4 suítes fora da coleção com nota explícita no
+  header do pytest; árvore completa com 245 coletados e apenas os 9
+  erros UI preexistentes (fora de escopo; ausentes no runner real, que
+  instala requirements.txt completo).
+
+**Decisão:** Guarda central no conftest raiz: quando qualquer dep
+opcional estiver ausente, os diretórios fidelity/golden/contracts/
+performance saem da coleção via `collect_ignore_glob`, com nota no
+cabeçalho (`pytest_report_header`) apontando o dono real desses testes
+(job `fidelity` do CI; local: `pip install -e .[fidelity]`). Import de
+`yaml` no conftest raiz tornado lazy. Suíte completa revalidada com deps
+presentes: guarda inerte (197/2/1 idêntico ao documentado; regressão de
+áudio 108/1 idêntica à baseline; flake8 0 violações).
+
+**Alternativas:**
+- `importorskip` por módulo: rejeitado — espalhado e inconsistente entre
+  4 diretórios e ~15 módulos.
+- Adicionar as deps ao requirements.txt: rejeitado — pesaria a instalação
+  mínima do produto (regra: produto inalterado).
+- Deixar como estava e aceitar CI vermelho no job `test`: rejeitado —
+  falso sinal de regressão onde há apenas ausência de deps opcionais.
+
+**Consequências:** Job `test` permanece dono da suíte do produto; job
+`fidelity` é o dono único e completo das suítes de fidelidade. DER real
+com pyannote.metrics permanece no workflow noturno, por design das fases
+7/9 (no job `fidelity` do PR os testes DER saem da coleção — skip
+rastreável, nunca falha mascarada).
+
+**Reverter:** Remover o bloco `_FIDELITY_*` do `tests/conftest.py`.

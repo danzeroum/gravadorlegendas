@@ -351,3 +351,24 @@ Workflows → Read and write ao token.
 (14 commits, HEAD `1405169`). O tempo de espera foi convertido em
 hardening pré-push (D-014/D-015) — a branch nasce CI-ready no primeiro
 run do PR.
+
+---
+
+## 2026-09-10 10:25 UTC — Hardening de CI: coleção graciosa sem deps opcionais (D-014)
+
+**Descrição:** O job `test` do CI instala apenas `requirements.txt`
+(numpy/PyYAML transitivos; scipy/soundfile/hypothesis/jiwer/jsonschema
+ausentes). Sem guarda, as suítes fidelity/golden/contracts/performance
+falhariam na coleta e em runtime. Evidência red→green em ambiente
+simulado do job `test`: antes — 4 erros de coleta (hypothesis×2,
+soundfile×2) + 3 falhas de runtime (scipy lazy em MET-03); depois — 0
+erros, suítes fora da coleção com nota no header do pytest. Guarda
+central em `tests/conftest.py` (`collect_ignore_glob` +
+`pytest_report_header`); `yaml` tornado lazy no conftest raiz.
+
+**Resultado:** Job `test` permanece dono da suíte do produto; job
+`fidelity` é o dono único das suítes de fidelidade. Suíte local completa
+revalidada pós-mudança (ambiente reconstruído nas versões do
+congelamento): **197 passed, 2 skipped, 1 xfailed** — idêntica ao
+documentado; regressão de áudio **108/1** idêntica à baseline; flake8 0
+violações.
