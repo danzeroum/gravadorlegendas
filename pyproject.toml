@@ -43,6 +43,26 @@ dev = [
     "pytest-cov>=4.1.0",
     "flake8>=7.0.0",
 ]
+# Fidelidade de áudio: suíte de testes de qualidade de captura (offline).
+# Não é dependência de runtime do produto — apenas desenvolvimento/CI.
+# Nota: deps de teste duplicadas de [dev] intencionalmente (auto-referência
+# de extra depende de suporte da ferramenta de instalação; duplicar é mais
+# robusto e evita resolver um pacote PyPI de mesmo nome).
+fidelity = [
+    "pytest>=7.4.0",
+    "jiwer>=3.0.0",
+    "hypothesis>=6.100.0",
+    "scipy>=1.11.0",
+    "SoundFile>=0.12.0",
+    "numpy>=1.24.0",
+    "PyYAML>=6.0",
+    "jsonschema>=4.20.0",
+]
+# Métricas DER offline (pesado: puxa torch). Opcional e separado de
+# dev/fidelity para não pesar o job padrão de PR.
+"diarization-metrics" = [
+    "pyannote.metrics>=0.28.0",
+]
 # Diarização (opcional, pesada) — requer token Hugging Face
 diarization = [
     "diart>=0.7.0",
@@ -59,6 +79,9 @@ include = ["src*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+# Evita warnings de marker desconhecido: qualquer marker fora da lista acima
+# é erro em vez de aviso silencioso.
+addopts = "-ra --strict-markers"
 markers = [
     "integration: testes de integração que exigem hardware real ou sessão gráfica",
     "requires_pipewire: testes que exigem PipeWire rodando",
@@ -68,6 +91,12 @@ markers = [
     "requires_wayland: testes que exigem sessão Wayland ativa",
     "requires_stt_model: testes que exigem modelo Whisper baixado em cache",
     "requires_tesseract: testes que exigem Tesseract instalado com idioma português",
+    "fidelity: testes de fidelidade de captura de áudio (integridade, contratos, metamórficos, WER/DER)",
+    "golden: testes de verificação contra golden master (baseline congelada)",
+    "performance: testes de budget de latência/performance (smoke ou produção)",
+    "real_audio: testes que exigem caminho de áudio real (loopback/hardware), não sintético",
+    "fuzz: testes de robustez com Hypothesis/entradas adversariais",
+    "requires_hf_token: testes que exigem token Hugging Face (referência de ambiente, nunca ecoado)",
 ]
 
 [tool.flake8]
