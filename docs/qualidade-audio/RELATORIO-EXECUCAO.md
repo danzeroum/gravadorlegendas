@@ -174,7 +174,7 @@ comandos reproduzíveis.
 ## 10. Referências
 
 - Matriz: `docs/qualidade-audio/PLANO-IMPLEMENTACAO.md`
-- Decisões: `docs/qualidade-audio/DECISOES.md` (D-001..D-011)
+- Decisões: `docs/qualidade-audio/DECISOES.md` (D-001..D-016)
 - Changelog fase a fase: `docs/qualidade-audio/CHANGELOG.md`
 - Manifesto do corpus (budgets/limiares calibrados):
   `tests/fixtures/corpus/manifest.yaml`
@@ -184,3 +184,34 @@ comandos reproduzíveis.
 - Referência metodológica: repositório `danzeroum/audio-suite`
 - Secret scanning: `python scripts/secret_scan_changed_files.py`
   (0 achados; sha256 de fixtures adjudicado como integridade)
+
+## 11. Adendo — Desbloqueio do push e publicação da branch (D-016)
+
+**2026-09-10 15:07 UTC.** O mantenedor reemitiu o PAT acrescentando
+**`Workflows → Read and write`** (ação requerida por D-013; `Contents →
+Read and write` mantido). O push da branch `feat/audio-fidelity-test-suite`
+foi executado e aceito, criando a ref remota com os 17 commits — o
+GitHub validou a alteração versionada em `.github/workflows/`
+(`ci.yml` + `audio-fidelity.yml`), confirmando a permissão.
+
+Protocolo de autenticação preservado: token recebido por canal privado,
+usado apenas via variável de ambiente no mesmo comando, nunca persistido
+em arquivo/config; saídas filtradas por regex de redação (defesa em
+profundidade).
+
+Verificação pós-push imediata:
+
+| Verificação | Resultado |
+|---|---|
+| SHA do HEAD (local vs remoto) | `ef4ed53` — idêntico |
+| Tree hash (local vs remoto) | `97a3e3f` — idêntico (conteúdo byte-exato) |
+| Commits vs `main` (API compare) | **17 ahead / 0 behind** |
+| Secret scanning (57 arquivos alterados) | **0 achados** |
+
+Sequência de fechamento em andamento: PR → revisão Copilot →
+encerramento da issue #4 (bloqueio resolvido) → checagem de CI no PR →
+adendo §12 com os resultados do CI no runner. Expectativa documentada:
+job `test` verde (suíte do produto + guarda D-014); job `fidelity`
+verde com ~164 passed/2 skipped/1 xfailed — DER sai da coleção por
+`pyannote.metrics` ausente no runner (por design; o noturno
+`audio-fidelity.yml` cobre com pyannote + whisper reais).

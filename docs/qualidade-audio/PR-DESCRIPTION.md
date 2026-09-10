@@ -151,7 +151,10 @@ local dos dados.
 
 ## Referências
 
+- **Fixes #4** — issue do bloqueio de push (D-012/D-013), resolvida pela
+  reemissão do PAT com `Contents` + `Workflows` (RW); publicação
+  verificada (D-016).
 - Execução completa: `docs/qualidade-audio/RELATORIO-EXECUCAO.md`
 - Matriz de rastreabilidade: `docs/qualidade-audio/PLANO-IMPLEMENTACAO.md`
-- Decisões (D-001..D-012): `docs/qualidade-audio/DECISOES.md`
+- Decisões (D-001..D-016): `docs/qualidade-audio/DECISOES.md`
 - Referência metodológica: `danzeroum/audio-suite`

@@ -391,3 +391,32 @@ completo; o --check vale como gate de reprodutibilidade byte a byte sem
 falso-positivo por drift de versão. Corpus revalidado: 100% regenerável;
 GOLDEN VERIFIED; secret scanning 0 achados. Branch agora CI-ready com 16
 commits — aguardando apenas a permissão Workflows (D-013) para o push.
+
+---
+
+## 2026-09-10 15:07 UTC — Desbloqueio e push da branch (D-016)
+
+**Descrição:** Mantenedor reemitiu o PAT com **Workflows → Read and
+write** (requisito pendente de D-013). Push executado com protocolo de
+segurança preservado (token apenas em env de comando; URL one-shot; não
+persistido em arquivo/config; saídas redigidas por regex). A ref remota
+`feat/audio-fidelity-test-suite` foi criada com os 17 commits, incluindo
+a alteração versionada em `.github/workflows/` aceita pelo GitHub.
+
+**Verificação pós-push:**
+
+| Verificação | Resultado |
+|---|---|
+| SHA HEAD local vs remoto | `ef4ed53` — idêntico |
+| Tree hash local vs remoto | `97a3e3f` — idêntico (byte-exato) |
+| API compare vs `main` | 17 ahead / 0 behind |
+| `python scripts/secret_scan_changed_files.py` | **0 segredos** (57 arquivos) |
+
+**Arquivos envolvidos:** `docs/qualidade-audio/RELATORIO-EXECUCAO.md`
+(adendo §11), `docs/qualidade-audio/DECISOES.md` (D-016),
+`docs/qualidade-audio/PR-DESCRIPTION.md` (Fixes #4; D-001..D-016),
+este CHANGELOG.
+
+**Resultado:** Bloqueio D-012/D-013 encerrado sem contorno e com
+rastreabilidade completa. Sequência final liberada: PR → revisão
+Copilot → issue #4 → CI do PR → adendo §12.

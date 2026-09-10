@@ -496,3 +496,39 @@ versões do congelamento. Pin documentado no workflow com comentário
 apontando para esta decisão e para os docstrings dos geradores.
 
 **Reverter:** Remover os `==` do passo de instalação do job `fidelity`.
+
+---
+
+## D-016 — Desbloqueio: PAT reemitido com `Workflows` RW; push executado e verificado
+
+**Data:** 2026-09-10 15:07 (UTC)
+
+**Contexto:** D-013 aguardava a reemissão do PAT pelo mantenedor com a
+permissão **Workflows → Read and write** (último requisito pendente da
+entrega; todo o restante — 17 commits, suíte revalidada, hardening
+D-014/D-015 — já estava pronto). O mantenedor reemitiu o token e
+informou a atualização por canal privado.
+
+**Decisão:** Executar o push imediatamente com o protocolo de segurança
+preservado (token apenas em variável de ambiente no mesmo comando; URL
+one-shot sem persistência em `.git/config`; saídas filtradas por regex
+de redação). Verificação pós-push completa antes de qualquer passo
+seguinte: SHA do HEAD local = remoto (`ef4ed53`); tree hash idêntico
+(`97a3e3f` — conteúdo byte-exato); API compare confirma **17 ahead /
+0 behind** de `main`; secret scanning re-executado — 0 achados em 57
+arquivos alterados. Documentado no adendo §11 do RELATORIO-EXECUCAO.md
+e no PR-DESCRIPTION.md com **Fixes #4** (encerramento nativo da issue
+de bloqueio).
+
+**Alternativas:**
+- Nenhuma considerada — as alternativas de contorno (push parcial,
+  Git Data API, fork) já haviam sido descartadas em D-013; o caminho
+  correto era aguardar a permissão e usá-la de forma auditável.
+
+**Consequências:** Caminho livre para a sequência final: PR → revisão
+Copilot → encerramento da issue #4 → checagem de CI no PR → adendo §12.
+A publicação fecha o ciclo D-012→D-013→D-016: nenhum contorno foi
+empregado; cada bloqueio virou registro rastreável.
+
+**Reverter:** N/A (registro de desbloqueio; a ref remota espelha o
+histórico local sem reescrita).
