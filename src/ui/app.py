@@ -474,6 +474,7 @@ class MainWindow:
             self._audio_manager.start(
                 device_index=backend_id,
                 enable_diarization=self._controls.diarize_enabled(),
+                output_prefix=config_store.get("last_prefix", "legendas"),
             )
         except Exception as e:
             self._machine.transition(RecordingState.IDLE)
@@ -523,7 +524,15 @@ class MainWindow:
         if self._audio_transcript_lines:
             self._transcription.set_export_enabled(True)
 
-        self._toast.show("Gravação finalizada.", kind="ok")
+        subtitle_paths = self._audio_manager.subtitle_paths
+        if subtitle_paths:
+            import os
+            self._statusbar.set_file(subtitle_paths[0])
+            names = ", ".join(os.path.basename(p) for p in subtitle_paths)
+            self._toast.show(f"Gravação finalizada. Legendas salvas: {names}",
+                             kind="ok")
+        else:
+            self._toast.show("Gravação finalizada.", kind="ok")
 
     def _tick_timer(self):
         if self._machine.state != RecordingState.RECORDING:

@@ -14,13 +14,19 @@ A partir do plano de curto prazo, este módulo também integra:
 - **Frente C** — RNNoise (supressão de ruído em tempo real), ativada
   via ``noise_suppression=True`` ou ``settings.noise_suppression``.
   Inserido entre a captura/mixagem e o buffer circular.
+- **Frente D** — acumula os segmentos com timestamp emitidos pelo
+  Whisper e, ao parar, grava ``.txt``/``.srt``/``.vtt`` em
+  ``settings.recording_dir`` (respeitando ``export_srt``/``export_vtt``).
 """
 import os
 import threading
 import multiprocessing
 import wave
 import tempfile
+import time
 from collections import deque
+from datetime import datetime
+from pathlib import Path
 
 import structlog
 
@@ -32,12 +38,16 @@ from src.audio.diarize import DiarizationProcess
 from src.audio.metrics import LatencyTracker, OverlapCounter
 from src.audio.recorder import DualTrackRecorder, DualTrackResult
 from src.audio.mixer import AudioMixer
+from src.audio.models import CaptionSegment
+from src.storage.subtitle_exporter import SubtitleExporter
 from src.config import settings
 
 _logger = structlog.get_logger()
 
 
 _SPEAKER_MERGE_TOLERANCE = 0.3
+# Tempo máximo, ao parar, esperando o Whisper transcrever o último trecho.
+_TRANSCRIBER_FLUSH_TIMEOUT_S = 15.0
 
 
 class AudioManager:
@@ -51,6 +61,7 @@ class AudioManager:
         on_transcription: Callback(text, speaker) chamado ao transcrever.
         on_error: Callback(str) chamado em erro.
         recorded_wav: Caminho do WAV salvo ao parar (None se vazio).
+        subtitle_paths: Arquivos .txt/.srt/.vtt gerados no último stop.
     """
 
     def __init__(self):
@@ -90,12 +101,21 @@ class AudioManager:
         self.on_error = None
 
         self._speaker_segments: deque = deque(maxlen=50)
+        # Frente D: segmentos da sessão para .txt/.srt/.vtt.
+        self._caption_segments: list[CaptionSegment] = []
+        self._subtitle_base: str | None = None
+        self.subtitle_paths: list[str] = []
         self._latency = LatencyTracker()
         self._overlap = OverlapCounter()
 
     @property
     def is_running(self) -> bool:
         return self._is_running
+
+    @property
+    def caption_segments(self) -> list[CaptionSegment]:
+        """Segmentos transcritos (timestamp absoluto) da sessão atual/última."""
+        return list(self._caption_segments)
 
     @property
     def dual_recorder_result(self) -> DualTrackResult | None:
@@ -106,7 +126,8 @@ class AudioManager:
               enable_diarization: bool = True,
               record_raw: bool | None = None,
               noise_suppression: bool | None = None,
-              system_device_index: int | str | None = None):
+              system_device_index: int | str | None = None,
+              output_prefix: str = "legendas"):
         """Inicia captura, transcrição e opcionalmente diarização.
 
         Args:
@@ -121,12 +142,21 @@ class AudioManager:
             system_device_index: Para ``audio_source=both``, segundo
                 dispositivo (monitor do sistema). Se None e
                 ``settings.audio_source == "both"``, usa auto-detect.
+            output_prefix: Prefixo dos arquivos gerados em
+                ``settings.recording_dir`` (legendas e WAVs dual-track).
         """
         if self._is_running:
             return
         self._is_running = True
         self._recorded_chunks.clear()
         self._speaker_segments.clear()
+        self._caption_segments.clear()
+        self.subtitle_paths = []
+        prefix = (output_prefix or "").strip() or "legendas"
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self._subtitle_base = os.path.join(
+            settings.recording_dir, f"{prefix}_{timestamp}",
+        )
         self.recorded_wav = None
         self._dual_recorder_result = None
 
@@ -180,6 +210,7 @@ class AudioManager:
                 output_dir=settings.recording_dir,
                 sample_rate=settings.sample_rate,
                 channels=settings.channels,
+                prefix=prefix,
             )
             self._dual_recorder.start()
 
@@ -237,16 +268,21 @@ class AudioManager:
         if self._system_capture is not None:
             self._system_capture.stop()
             self._system_capture = None
+        if self._fanout_thread is not None:
+            self._fanout_thread.join(timeout=2.0)
+            self._fanout_thread = None
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+            self._thread = None
         if self._transcriber:
             self._transcriber.stop()
+            self._drain_transcripts(self._transcriber)
             self._transcriber = None
         if self._diarizer:
             self._diarizer.stop()
             self._diarizer = None
-        if self._fanout_thread is not None:
-            self._fanout_thread.join(timeout=2.0)
-            self._fanout_thread = None
         self._save_recorded_wav()
+        self._export_subtitles()
         self._latency.log("audio_stop")
         self._overlap.log("audio_stop")
 
@@ -266,6 +302,57 @@ class AudioManager:
             multiprocessing.Queue(), multiprocessing.Queue()
         )
         return dp.diarize_file(self.recorded_wav)
+
+    def _drain_transcripts(self, transcriber) -> None:
+        """Coleta os resultados pendentes após sinalizar parada.
+
+        O processo de transcrição transcreve o último trecho ainda no
+        buffer e publica ``{"done": True}``; esperamos por isso (com
+        timeout) para que a fala final não fique fora das legendas.
+        """
+        deadline = time.monotonic() + _TRANSCRIBER_FLUSH_TIMEOUT_S
+        while time.monotonic() < deadline:
+            try:
+                result = self._transcript_queue.get(timeout=0.2)
+            except Exception:
+                if not transcriber.is_alive():
+                    break
+                continue
+            if result.get("done"):
+                break
+            self._handle_transcript(result)
+        else:
+            _logger.warning("transcriber_flush_timeout",
+                            timeout_s=_TRANSCRIBER_FLUSH_TIMEOUT_S)
+
+    def _export_subtitles(self) -> None:
+        """Grava .txt/.srt/.vtt da sessão em ``settings.recording_dir``.
+
+        Não cria arquivos quando nada foi transcrito (T6.6).
+        """
+        self.subtitle_paths = []
+        if not self._caption_segments or not self._subtitle_base:
+            return
+        segments = sorted(self._caption_segments, key=lambda s: s.start)
+        base = self._subtitle_base
+        try:
+            Path(base).parent.mkdir(parents=True, exist_ok=True)
+            txt_path = base + ".txt"
+            with open(txt_path, "w", encoding="utf-8") as f:
+                for seg in segments:
+                    f.write(f"[{_format_clock(seg.start)}] {seg.text}\n")
+            self.subtitle_paths.append(txt_path)
+            exporter = SubtitleExporter()
+            if settings.export_srt:
+                exporter.save_srt(segments, base + ".srt")
+                self.subtitle_paths.append(base + ".srt")
+            if settings.export_vtt:
+                exporter.save_vtt(segments, base + ".vtt")
+                self.subtitle_paths.append(base + ".vtt")
+        except Exception as e:
+            _logger.error("subtitle_export_failed", error=str(e))
+            if self.on_error:
+                self.on_error(f"Falha ao salvar legendas: {e}")
 
     def _save_recorded_wav(self):
         """Salva áudio capturado em arquivo WAV temporário."""
@@ -384,11 +471,22 @@ class AudioManager:
         except Exception:
             return
 
+        self._handle_transcript(result)
+
+    def _handle_transcript(self, result: dict) -> None:
+        """Processa um resultado do transcriber (texto + segmentos)."""
         if "error" in result and self.on_error:
             self.on_error(result["error"])
             return
         if "text" not in result:
             return
+
+        for seg in result.get("segments") or []:
+            text = (seg.get("text") or "").strip()
+            if text and seg.get("end", 0) > seg.get("start", 0):
+                self._caption_segments.append(
+                    CaptionSegment(start=seg["start"], end=seg["end"], text=text)
+                )
 
         batch = result.get("batch", 0)
         self._latency.mark_receive(batch)
@@ -414,3 +512,8 @@ class AudioManager:
                 best = seg["speaker"]
                 best_overlap = overlap
         return best
+
+
+def _format_clock(seconds: float) -> str:
+    total = int(seconds)
+    return f"{total // 3600:02d}:{total % 3600 // 60:02d}:{total % 60:02d}"

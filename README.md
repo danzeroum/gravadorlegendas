@@ -193,6 +193,21 @@ A interface respeita `APP_WIDGET_SCALING` (env) ou a preferência persistida em 
 - A aba Áudio funciona normalmente (PipeWire é independente da sessão gráfica).
 - Para OCR de tela, use sessão X11.
 
+### Transcrever um áudio já gravado (offline)
+
+Para gerar legendas de um `.wav` que já está em `data/recordings` (por exemplo,
+uma reunião gravada com `RECORD_RAW_AUDIO=true`):
+
+```bash
+python scripts/transcribe_file.py data/recordings/reuniao_2026-01-01_10-00-00_mic.wav
+python scripts/transcribe_file.py data/recordings                 # todos os .wav sem legenda
+python scripts/transcribe_file.py arquivo.wav --model small --beam-size 5   # mais preciso
+```
+
+Gera `.txt` (com timestamps), `.srt` e `.vtt` ao lado de cada áudio. Arquivos
+que já têm `.srt` são pulados (use `--force` para refazer). Modelo, idioma e VAD
+seguem o `.env` (`STT_MODEL`, `STT_LANGUAGE`, …); veja `--help`.
+
 ### Diagnóstico de áudio (Linux)
 
 ```bash
@@ -318,8 +333,8 @@ Variáveis de ambiente (`.env`) — veja `.env.example` para o template completo
 | `RECORD_RAW_AUDIO` | `false` | Se `true`, ativa gravação dual-track (mic+sistema em WAVs separados). Os arquivos são salvos em `RECORDING_DIR` com sufixos `_mic.wav` e `_sistema.wav`. |
 | `RECORDING_DIR` | `data/recordings` | Diretório onde transcrições `.txt` (e agora `.srt`/`.vtt`/`.wav`) são salvos. |
 | `NOISE_SUPPRESSION` | `false` | Se `true`, ativa filtro de ruído RNNoise no pipeline de áudio (entre captura e Whisper). Reduz ruído de fundo em tempo real, mas adiciona latência — validar com `T5.2` antes de habilitar em produção. |
-| `EXPORT_SRT` | `true` | Se `true`, gera arquivo `.srt` ao lado do `.txt` ao final da sessão. |
-| `EXPORT_VTT` | `true` | Se `true`, gera arquivo `.vtt` ao lado do `.txt` ao final da sessão. |
+| `EXPORT_SRT` | `true` | Se `true`, ao parar a transcrição de áudio gera `<prefixo>_<data-hora>.srt` em `RECORDING_DIR` (o `.txt` com timestamps é sempre gerado quando há fala). |
+| `EXPORT_VTT` | `true` | Se `true`, ao parar a transcrição de áudio gera `<prefixo>_<data-hora>.vtt` em `RECORDING_DIR`. |
 
 ### Tradicionais (preservadas)
 
