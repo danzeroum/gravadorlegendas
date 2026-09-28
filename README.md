@@ -193,6 +193,21 @@ A interface respeita `APP_WIDGET_SCALING` (env) ou a preferência persistida em 
 - A aba Áudio funciona normalmente (PipeWire é independente da sessão gráfica).
 - Para OCR de tela, use sessão X11.
 
+### Transcrever um áudio já gravado (offline)
+
+Para gerar legendas de um `.wav` que já está em `data/recordings` (por exemplo,
+uma reunião gravada com `RECORD_RAW_AUDIO=true`):
+
+```bash
+python scripts/transcribe_file.py data/recordings/reuniao_2026-01-01_10-00-00_mic.wav
+python scripts/transcribe_file.py data/recordings                 # todos os .wav sem legenda
+python scripts/transcribe_file.py arquivo.wav --model small --beam-size 5   # mais preciso
+```
+
+Gera `.txt` (com timestamps), `.srt` e `.vtt` ao lado de cada áudio. Arquivos
+que já têm `.srt` são pulados (use `--force` para refazer). Modelo, idioma e VAD
+seguem o `.env` (`STT_MODEL`, `STT_LANGUAGE`, …); veja `--help`.
+
 ### Diagnóstico de áudio (Linux)
 
 ```bash
