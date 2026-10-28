@@ -26,6 +26,9 @@ dependencies = [
 # Áudio — comum a Windows e Linux (faster-whisper + silero-vad + numpy)
 audio = [
     "faster-whisper>=1.0.0",
+    # Decodificação de mp3/m4a/mp4/ogg… na importação de arquivos (já vem
+    # com o faster-whisper; explícito porque src/audio/file_decode.py o usa).
+    "av>=11.0.0",
     "silero-vad>=4.0.0",
     "SoundFile>=0.12.0",
     "numpy>=1.24.0",

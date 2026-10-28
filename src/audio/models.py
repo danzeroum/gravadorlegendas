@@ -50,11 +50,15 @@ class CaptionSegment:
             ser vazio — segmentos vazios (silêncio) devem ser filtrados
             antes de chegar ao exportador (cobre T6.6 do plano de
             testes — sem legenda alucinada em silêncio).
+        speaker: Rótulo do falante (ex.: ``SPEAKER_00``) ou None quando
+            não houve diarização. Fica fora do desempacotamento posicional
+            para manter ``start, end, text = seg`` funcionando.
     """
 
     start: float
     end: float
     text: str
+    speaker: str | None = None
 
     def __post_init__(self):
         # Garantia defensiva: texto sempre stripped. Não rejeitamos

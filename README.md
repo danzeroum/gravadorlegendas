@@ -20,7 +20,8 @@ captura de áudio, diarização de falantes e LLM local — **multiplataforma**
   - **Linux (Fedora)**: PipeWire via `pw-record` (microfone e áudio do sistema).
 - **Transcrição local** — `faster-whisper` (CPU ou CUDA).
 - **VAD** — `silero-vad` para detecção de fala.
-- **Diarização** — identificação de falantes em tempo real ou offline (diart + pyannote.audio).
+- **Diarização** — identificação de falantes em tempo real (diart) ou offline (pyannote.audio), com falante atribuído a cada palavra.
+- **Importar áudio/vídeo** — abra um arquivo gravado no celular, WhatsApp ou Teams (mp3, m4a, mp4, wav, ogg/opus, flac, webm) e receba a transcrição separada em "Participante A, B, C…".
 - **Exportação** — transcrição com rótulos de falante em Markdown.
 - **LLM pluggável** — Ollama (Basic Auth + NDJSON), OpenAI, DeepSeek, LocalGGUF.
 - **Resumo automático** da reunião via LLM, incluindo contexto de áudio + OCR.
@@ -102,8 +103,14 @@ copy .env.example .env
 
 ```bash
 pip install -e ".[diarization]"
-huggingface-cli login  # aceite os termos em pyannote/speaker-diarization-3.1
+huggingface-cli login  # ou defina HF_TOKEN no .env
 ```
+
+Aceite os termos do modelo com a mesma conta do token: com pyannote.audio 4.x,
+[pyannote/speaker-diarization-community-1](https://hf.co/pyannote/speaker-diarization-community-1);
+com 3.x, [pyannote/speaker-diarization-3.1](https://hf.co/pyannote/speaker-diarization-3.1)
+(`DIARIZATION_MODEL` escolhe outro). Sem isso, o app transcreve normalmente e
+avisa que não separou os participantes.
 
 ---
 
@@ -147,6 +154,7 @@ A nova tela principal prioriza o fluxo **captura de áudio → transcrição ao 
 | `Ctrl+R` | Iniciar/parar gravação (toggle) |
 | `Ctrl+S` | Salvar transcrição como .txt |
 | `Ctrl+L` | Limpar transcrição (com confirmação) |
+| `Ctrl+O` | Importar áudio/vídeo para transcrever |
 | `Ctrl+,` | Abrir configurações |
 | `Esc` | Fechar painel lateral ou diálogo modal |
 
@@ -193,6 +201,56 @@ A interface respeita `APP_WIDGET_SCALING` (env) ou a preferência persistida em 
 - A aba Áudio funciona normalmente (PipeWire é independente da sessão gráfica).
 - Para OCR de tela, use sessão X11.
 
+### Usar com o opencode (transcrever pedindo em português)
+
+O repositório já vem configurado para o [opencode](https://opencode.ai):
+`AGENTS.md` ensina o agente a usar as ferramentas, `.opencode/commands/` traz
+comandos prontos e `opencode.json` libera o script de transcrição sem pedir
+permissão a cada vez.
+
+```bash
+bash scripts/setup_ambiente.sh                          # 1ª vez: transcrição
+bash scripts/setup_ambiente.sh --separar-participantes  # + separar vozes (A, B, C…)
+```
+
+Depois, coloque o áudio em `audios/`, abra o `opencode` na pasta do projeto e
+peça, por exemplo:
+
+- "transcreva o áudio reuniao_segunda" (ou `/transcrever reuniao_segunda`)
+- "são 3 pessoas, use o modelo small"
+- "o participante A é a Juliana e o B é o Daniel" (ou `/renomear`)
+- "faça a ata com decisões e pendências" (ou `/resumir reuniao_segunda`)
+- `/audios` (lista) · `/verificar` (checa o ambiente)
+
+As transcrições ficam em `audios/transcricoes/` (`.txt`, `.srt`, `.vtt`, `.md`,
+`.json`). Nada de `audios/` vai para o git. Sem o opencode, o mesmo fluxo é
+`.venv/bin/python scripts/transcrever_audio.py reuniao_segunda`.
+
+### Importar um áudio gravado (celular, WhatsApp, Teams…)
+
+1. Clique em **📂 Importar áudio…** (ou `Ctrl+O`) e escolha o arquivo
+   (`.mp3`, `.m4a`, `.mp4`, `.wav`, `.ogg`/`.opus`, `.flac`, `.webm`).
+2. Informe, se souber, **quantas pessoas falam** — melhora a separação — e o
+   modelo (`small` costuma acertar mais em conversa natural; é mais lento).
+3. Acompanhe o progresso no topo; o botão vira **Cancelar importação**.
+4. O resultado aparece como `[00:01:12] ● Participante A: texto`, e
+   `.txt`/`.srt`/`.vtt` são salvos em `RECORDING_DIR` com o nome do arquivo.
+5. No painel **Falantes**, renomeie "Participante A" para o nome real e clique
+   **Exportar .md** para atualizar a tela e os arquivos com os nomes.
+
+Limitações:
+- Gravação de celular tem **uma faixa só**: a separação usa apenas o timbre de
+  voz. Vozes parecidas, falas simultâneas e aparelho longe das pessoas podem
+  trocar o participante em alguns trechos.
+- "Participante A" vale **só para aquele arquivo** — não é a mesma pessoa do
+  "A" de outro arquivo.
+- A separação exige o extra `.[diarization]` e o token Hugging Face (veja
+  *Diarização* em Instalação); sem eles o arquivo é transcrito sem separar.
+- O tempo depende do modelo, da CPU/GPU e da duração do áudio.
+
+`SPEAKER_LABEL_STYLE=numbers` muda para "Participante 1, 2…" e `raw` mantém
+`SPEAKER_00`; `SPEAKER_LABEL_PREFIX` troca a palavra "Participante".
+
 ### Transcrever um áudio já gravado (offline)
 
 Para gerar legendas de um `.wav` que já está em `data/recordings` (por exemplo,
@@ -207,6 +265,17 @@ python scripts/transcribe_file.py arquivo.wav --model small --beam-size 5   # ma
 Gera `.txt` (com timestamps), `.srt` e `.vtt` ao lado de cada áudio. Arquivos
 que já têm `.srt` são pulados (use `--force` para refazer). Modelo, idioma e VAD
 seguem o `.env` (`STT_MODEL`, `STT_LANGUAGE`, …); veja `--help`.
+
+Para separar os participantes (mesmo pipeline do botão Importar):
+
+```bash
+python scripts/transcribe_file.py audio_celular.m4a --diarize
+python scripts/transcribe_file.py reuniao.mp4 --diarize --num-speakers 4
+python scripts/transcribe_file.py reuniao.mp3 --diarize --speaker-map nomes.json
+```
+
+`nomes.json` é `{"SPEAKER_00": "Juliana", "SPEAKER_01": "Daniel"}`. Detalhes,
+métricas (DER/cpWER) e decisões em `docs/diarizacao/`.
 
 ### Diagnóstico de áudio (Linux)
 
@@ -266,7 +335,12 @@ src/
 │   ├── vad.py               #   Voice Activity Detection (silero-vad)
 │   ├── buffer.py            #   Buffer circular thread-safe
 │   ├── transcribe.py        #   Transcrição (faster-whisper em Process)
-│   ├── diarize.py           #   Diarização de falantes (diart)
+│   ├── diarize.py           #   Diarização ao vivo (diart) + delegação offline
+│   ├── offline_diarizer.py  #   Diarização de arquivo (pyannote.audio 3.x/4.x)
+│   ├── speaker_assignment.py#   Falante por palavra (ponto médio) + legendas
+│   ├── speaker_labels.py    #   "Participante A, B, C…"
+│   ├── file_decode.py       #   mp3/m4a/mp4/ogg… → WAV 16 kHz (PyAV)
+│   ├── file_pipeline.py     #   Importar arquivo: decodificar→transcrever→diarizar
 │   ├── manager.py           #   Orquestração com 2 filas + merge
 │   ├── metrics.py           #   Latência e sobreposição
 │   └── models.py            #   Download/cache de modelos

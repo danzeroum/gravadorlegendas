@@ -59,6 +59,10 @@ class TranscriberProcess(multiprocessing.Process):
         vad_filter: Silero VAD antes da transcrição. Elimina as alucinações
             repetitivas do Whisper em silêncio ("e o que é o que é...") sem
             descartar a fala real; habilitado por padrão.
+        word_timestamps: Emite ``"words"`` (tempo absoluto por palavra) em
+            cada resultado, para atribuir falante por palavra (Frente F do
+            plano de diarização). Custa um pouco de CPU; o ``AudioManager``
+            liga só quando a diarização está ativa.
     """
 
     def __init__(
@@ -72,6 +76,7 @@ class TranscriberProcess(multiprocessing.Process):
         beam_size: int = 1,
         temperature: float = 0.0,
         vad_filter: bool = True,
+        word_timestamps: bool = False,
     ):
         super().__init__(daemon=True)
         self._input = input_queue
@@ -83,6 +88,7 @@ class TranscriberProcess(multiprocessing.Process):
         self._beam_size = beam_size
         self._temperature = temperature
         self._vad_filter = vad_filter
+        self._word_timestamps = word_timestamps
         self._stop_event = multiprocessing.Event()
 
     def stop(self):
@@ -209,11 +215,13 @@ class TranscriberProcess(multiprocessing.Process):
                 beam_size=self._beam_size,
                 temperature=self._temperature,
                 vad_filter=self._vad_filter,
+                word_timestamps=self._word_timestamps,
             )
             # Frente D: coleta segmentos individuais com timestamp
             # absoluto (relativo ao início do áudio da sessão).
             seg_list = []
             text_parts = []
+            word_list = []
             for seg in segments:
                 seg_text = (seg.text or "").strip()
                 if not seg_text:
@@ -234,6 +242,15 @@ class TranscriberProcess(multiprocessing.Process):
                     "text": seg_text,
                 })
                 text_parts.append(seg_text)
+                for w in (getattr(seg, "words", None) or []):
+                    # Mantém o espaço inicial (marca de início de palavra
+                    # do Whisper) para juntar pedaços corretamente.
+                    w_text = w.word or ""
+                    w_start = round(audio_offset + float(w.start), 3)
+                    w_end = round(min(audio_offset + float(w.end), batch_limit), 3)
+                    if w_text.strip() and w_end > w_start:
+                        word_list.append({"start": w_start, "end": w_end,
+                                          "text": w_text})
             text = " ".join(text_parts)
             _logger.info(
                 "stt_batch_done",
@@ -245,7 +262,7 @@ class TranscriberProcess(multiprocessing.Process):
                 n_segments=len(seg_list),
             )
             if text.strip():
-                self._output.put({
+                payload = {
                     "text": text.strip(),
                     "start": seg_start,
                     "end": seg_end,
@@ -253,6 +270,9 @@ class TranscriberProcess(multiprocessing.Process):
                     # Frente D: lista de segmentos com timestamp
                     # absoluto por segmento, para o exportador SRT/VTT.
                     "segments": seg_list,
-                })
+                }
+                if self._word_timestamps:
+                    payload["words"] = word_list
+                self._output.put(payload)
         except Exception as e:
             self._output.put({"error": str(e)})

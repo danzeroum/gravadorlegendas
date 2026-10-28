@@ -12,15 +12,26 @@ Uso:
     python scripts/transcribe_file.py data/recordings            # todos os .wav
     python scripts/transcribe_file.py arquivo.wav --model small --beam-size 5
     python scripts/transcribe_file.py data/recordings --force    # sobrescreve
+    python scripts/transcribe_file.py audio_celular.m4a --diarize          # separa falantes
+    python scripts/transcribe_file.py reuniao.mp4 --diarize --num-speakers 4
+    python scripts/transcribe_file.py reuniao.mp3 --diarize --speaker-map nomes.json
 
 Os padrões de modelo, idioma, beam e VAD vêm do ``.env`` (``STT_MODEL``,
 ``STT_LANGUAGE``, ``STT_BEAM_SIZE``, ``STT_VAD_FILTER``), os mesmos da
 transcrição ao vivo. Para fala humana natural, ``--model small --beam-size 5``
 costuma dar resultado melhor (mais lento).
+
+``--diarize`` separa os falantes pela voz (pyannote.audio; exige o extra
+``.[diarization]`` e token Hugging Face) e atribui cada palavra a um falante;
+as legendas saem como ``[Participante A] texto`` (``--labels`` muda o
+estilo). ``--speaker-map`` troca os rótulos por nomes: JSON
+``{"SPEAKER_00": "Juliana"}`` ou o formato do painel Falantes
+(``{"SPEAKER_00": {"name": "Juliana", "color": "..."}}``).
 """
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -30,7 +41,6 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.audio.models import CaptionSegment  # noqa: E402
-from src.audio.transcribe import WHISPER_DOWNLOAD_ROOT  # noqa: E402
 from src.config import settings  # noqa: E402
 from src.storage.subtitle_exporter import SubtitleExporter  # noqa: E402
 
@@ -56,21 +66,19 @@ def collect_inputs(paths: list[str]) -> list[Path]:
 
 def load_model(model_size: str, device: str):
     """Carrega o WhisperModel usando o mesmo cache do app."""
-    from faster_whisper import WhisperModel
+    from src.audio.file_pipeline import load_whisper
+    return load_whisper(model_size, device)
 
-    if device == "auto":
-        device = "cpu"
-        try:
-            import ctranslate2
-            if ctranslate2.get_cuda_device_count() > 0:
-                device = "cuda"
-        except Exception:
-            pass
-    return WhisperModel(
-        model_size,
-        device=device,
-        download_root=str(WHISPER_DOWNLOAD_ROOT),
-    )
+
+def load_speaker_map(path: str | None) -> dict[str, str]:
+    """Lê ``--speaker-map``: ``{rótulo: nome}`` ou ``{rótulo: {name, color}}``."""
+    if not path:
+        return {}
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    return {
+        str(k): (v.get("name", "") if isinstance(v, dict) else str(v))
+        for k, v in data.items()
+    }
 
 
 def transcribe(model, audio_path: Path, *, language: str | None,
@@ -95,26 +103,51 @@ def transcribe(model, audio_path: Path, *, language: str | None,
     return result
 
 
+def transcribe_with_speakers(model, diarizer, audio_path: Path, *,
+                             language: str | None, beam_size: int,
+                             vad_filter: bool, num_speakers: int | None = None,
+                             min_speakers: int | None = None,
+                             max_speakers: int | None = None,
+                             label_style: str = "letters",
+                             ) -> tuple[list[CaptionSegment], dict[str, str]]:
+    """Transcreve com falante por palavra (``src/audio/file_pipeline.py``).
+
+    Returns:
+        (legendas, rótulo → nome amigável).
+    """
+    from src.audio.file_pipeline import transcribe_audio_file
+
+    result = transcribe_audio_file(
+        audio_path, model=model, language=language, beam_size=beam_size,
+        vad_filter=vad_filter, diarize=True, require_diarization=True,
+        num_speakers=num_speakers, min_speakers=min_speakers,
+        max_speakers=max_speakers, diarizer=diarizer, label_style=label_style,
+    )
+    for seg in result.segments:
+        name = result.speakers.get(seg.speaker, seg.speaker)
+        print(f"   [{_fmt(seg.start)}] {name}: {seg.text}", flush=True)
+    print(f"   👥 {len(result.speakers)} falante(s)")
+    return result.segments, result.speakers
+
+
 def write_outputs(segments: list[CaptionSegment], audio_path: Path,
-                  formats: set[str]) -> list[Path]:
+                  formats: set[str],
+                  speaker_names: dict[str, str] | None = None) -> list[Path]:
     """Grava .txt/.srt/.vtt ao lado do áudio. Retorna os caminhos criados."""
     exporter = SubtitleExporter()
     base = audio_path.with_suffix("")
     written: list[Path] = []
     if "txt" in formats:
         txt = base.with_suffix(".txt")
-        txt.write_text(
-            "".join(f"[{_fmt(s.start)}] {s.text}\n" for s in segments),
-            encoding="utf-8",
-        )
+        exporter.save_txt(segments, str(txt), speaker_names)
         written.append(txt)
     if "srt" in formats:
         srt = base.with_suffix(".srt")
-        exporter.save_srt(segments, str(srt))
+        exporter.save_srt(segments, str(srt), speaker_names)
         written.append(srt)
     if "vtt" in formats:
         vtt = base.with_suffix(".vtt")
-        exporter.save_vtt(segments, str(vtt))
+        exporter.save_vtt(segments, str(vtt), speaker_names)
         written.append(vtt)
     return written
 
@@ -145,7 +178,19 @@ def main(argv: list[str] | None = None) -> int:
                         help="Formatos de saída separados por vírgula (padrão: txt,srt,vtt)")
     parser.add_argument("--force", action="store_true",
                         help="Reprocessa mesmo se o .srt já existir")
+    parser.add_argument("--diarize", action="store_true",
+                        help="Separa os falantes pela voz (requer .[diarization] + HF_TOKEN)")
+    parser.add_argument("--num-speakers", type=int,
+                        help="Nº de falantes, se souber (melhora a separação)")
+    parser.add_argument("--min-speakers", type=int)
+    parser.add_argument("--max-speakers", type=int)
+    parser.add_argument("--labels", default=settings.speaker_label_style,
+                        choices=["letters", "numbers", "raw"],
+                        help="Rótulos: letters (Participante A, B…), numbers (1, 2…), raw (SPEAKER_00)")
+    parser.add_argument("--speaker-map",
+                        help="JSON com nomes: {\"SPEAKER_00\": \"Juliana\"}")
     args = parser.parse_args(argv)
+    speaker_names = load_speaker_map(args.speaker_map)
 
     formats = {f.strip().lower() for f in args.formats.split(",") if f.strip()}
     invalid = formats - {"txt", "srt", "vtt"}
@@ -163,6 +208,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     language = None if args.language == "auto" else args.language
+    diarizer = None
+    if args.diarize:
+        from src.audio.offline_diarizer import DiarizationUnavailable, OfflineDiarizer
+        diarizer = OfflineDiarizer()
+        try:
+            diarizer.check_ready()  # falha antes de carregar o Whisper
+        except DiarizationUnavailable as e:
+            print(f"❌ {e}", file=sys.stderr)
+            return 2
     print(f"📥 Carregando modelo Whisper '{args.model}'...")
     try:
         model = load_model(args.model, args.device)
@@ -176,9 +230,22 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\n🎙️  Transcrevendo: {audio_path}")
         t0 = time.monotonic()
         try:
-            segments = transcribe(model, audio_path, language=language,
-                                  beam_size=args.beam_size,
-                                  vad_filter=not args.no_vad)
+            names = speaker_names
+            if args.diarize:
+                segments, labels = transcribe_with_speakers(
+                    model, diarizer, audio_path, language=language,
+                    beam_size=args.beam_size, vad_filter=not args.no_vad,
+                    num_speakers=args.num_speakers,
+                    min_speakers=args.min_speakers,
+                    max_speakers=args.max_speakers,
+                    label_style=args.labels,
+                )
+                # --speaker-map vence o rótulo automático.
+                names = {**labels, **{k: v for k, v in speaker_names.items() if v}}
+            else:
+                segments = transcribe(model, audio_path, language=language,
+                                      beam_size=args.beam_size,
+                                      vad_filter=not args.no_vad)
         except Exception as e:
             print(f"❌ Falha ao transcrever {audio_path}: {e}", file=sys.stderr)
             failures += 1
@@ -186,7 +253,7 @@ def main(argv: list[str] | None = None) -> int:
         if not segments:
             print("⚠️  Nenhuma fala detectada; nenhum arquivo gerado.")
             continue
-        written = write_outputs(segments, audio_path, formats)
+        written = write_outputs(segments, audio_path, formats, names)
         print(f"✅ {len(segments)} segmentos em {time.monotonic() - t0:.1f}s:")
         for w in written:
             print(f"   {w}")

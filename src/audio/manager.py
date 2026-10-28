@@ -39,6 +39,7 @@ from src.audio.metrics import LatencyTracker, OverlapCounter
 from src.audio.recorder import DualTrackRecorder, DualTrackResult
 from src.audio.mixer import AudioMixer
 from src.audio.models import CaptionSegment
+from src.audio.speaker_assignment import Word, assign_words, group_segments
 from src.storage.subtitle_exporter import SubtitleExporter
 from src.config import settings
 
@@ -76,6 +77,11 @@ class AudioManager:
         self._audio_queue: multiprocessing.Queue = multiprocessing.Queue()
         self._transcript_queue: multiprocessing.Queue = multiprocessing.Queue()
         self._diarization_queue: multiprocessing.Queue = multiprocessing.Queue()
+        # Áudio para o diarizador em fila PRÓPRIA (D-017): uma
+        # multiprocessing.Queue entrega cada item a um único consumidor, então
+        # compartilhar ``_audio_queue`` fazia Whisper e diart disputarem os
+        # chunks (cada um recebia só parte do áudio).
+        self._diarization_audio_queue: multiprocessing.Queue = multiprocessing.Queue()
 
         self._recorded_chunks: list[bytes] = []
         self.recorded_wav: str | None = None
@@ -195,12 +201,14 @@ class AudioManager:
             beam_size=settings.stt_beam_size,
             temperature=settings.stt_temperature,
             vad_filter=settings.stt_vad_filter,
+            # Frente F: palavra com tempo só faz sentido com diarização.
+            word_timestamps=enable_diarization,
         )
         self._transcriber.start()
 
         if enable_diarization:
             self._diarizer = DiarizationProcess(
-                self._audio_queue, self._diarization_queue
+                self._diarization_audio_queue, self._diarization_queue
             )
             self._diarizer.start()
 
@@ -337,12 +345,10 @@ class AudioManager:
         base = self._subtitle_base
         try:
             Path(base).parent.mkdir(parents=True, exist_ok=True)
-            txt_path = base + ".txt"
-            with open(txt_path, "w", encoding="utf-8") as f:
-                for seg in segments:
-                    f.write(f"[{_format_clock(seg.start)}] {seg.text}\n")
-            self.subtitle_paths.append(txt_path)
             exporter = SubtitleExporter()
+            txt_path = base + ".txt"
+            exporter.save_txt(segments, txt_path)
+            self.subtitle_paths.append(txt_path)
             if settings.export_srt:
                 exporter.save_srt(segments, base + ".srt")
                 self.subtitle_paths.append(base + ".srt")
@@ -393,6 +399,8 @@ class AudioManager:
         Ordem do pipeline:
             captura -> mixagem opcional -> RNNoise opcional
                    -> [recorder + audio_queue (Whisper)]
+            captura -> mixagem opcional (sem RNNoise)
+                   -> [diarization_audio_queue + WAV de reprocessamento]
         """
         import queue as _q
 
@@ -412,6 +420,11 @@ class AudioManager:
                 # T4.3: se sistema está vazio, mix_frame repassa o mic
                 processed = self._mixer.mix_frame(mic_chunk, sys_chunk)
 
+            # Diarização e reprocessamento leem o áudio ANTES do RNNoise
+            # (regra R2 / D-009: o filtro degrada a fala e confunde os
+            # embeddings de voz).
+            unfiltered = processed
+
             # Frente C: aplica RNNoise, se ativo
             if self._noise_filter is not None and processed is not None:
                 try:
@@ -422,8 +435,9 @@ class AudioManager:
             if processed is None:
                 continue
 
-            # Mantém compatibilidade: armazena para _save_recorded_wav.
-            self._recorded_chunks.append(processed)
+            # WAV da sessão (_save_recorded_wav) só serve ao reprocessamento
+            # com diarização — guarda o áudio sem RNNoise.
+            self._recorded_chunks.append(unfiltered)
 
             # Fan-out para o recorder dual-track (se ativo) — separa
             # mic e sistema novamente para gravar em trilhos distintos.
@@ -448,6 +462,13 @@ class AudioManager:
                 self._audio_queue.put(processed)
             except Exception:
                 pass
+
+            # Alimenta o diarizador ao vivo, se ativo (fila própria).
+            if self._diarizer is not None:
+                try:
+                    self._diarization_audio_queue.put(unfiltered)
+                except Exception:
+                    pass
 
     def _collect_diarization_nowait(self):
         """Lê segmentos de diarização pendentes (non-blocking)."""
@@ -481,15 +502,33 @@ class AudioManager:
         if "text" not in result:
             return
 
+        batch = result.get("batch", 0)
+        self._latency.mark_receive(batch)
+
+        # Frente F: com palavras e turnos de diarização, atribui falante por
+        # palavra e emite um trecho por falante. Ao vivo é best effort (os
+        # turnos do diart chegam com atraso); o reprocessamento offline é a
+        # fonte de verdade.
+        words = result.get("words")
+        if words and self._speaker_segments:
+            assigned = assign_words(
+                [Word(w["start"], w["end"], w["text"]) for w in words],
+                list(self._speaker_segments),
+            )
+            groups = group_segments(assigned)
+            if groups:
+                self._caption_segments.extend(groups)
+                if self.on_transcription:
+                    for seg in groups:
+                        self.on_transcription(seg.text, seg.speaker)
+                return
+
         for seg in result.get("segments") or []:
             text = (seg.get("text") or "").strip()
             if text and seg.get("end", 0) > seg.get("start", 0):
                 self._caption_segments.append(
                     CaptionSegment(start=seg["start"], end=seg["end"], text=text)
                 )
-
-        batch = result.get("batch", 0)
-        self._latency.mark_receive(batch)
 
         speaker = self._match_speaker(
             result.get("start", 0), result.get("end", 0)
@@ -512,8 +551,3 @@ class AudioManager:
                 best = seg["speaker"]
                 best_overlap = overlap
         return best
-
-
-def _format_clock(seconds: float) -> str:
-    total = int(seconds)
-    return f"{total // 3600:02d}:{total % 3600 // 60:02d}:{total % 60:02d}"

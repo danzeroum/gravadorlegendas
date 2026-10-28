@@ -11,6 +11,10 @@ Garantias:
 - Não gera bloco para segmentos vazios/silêncio (cobre T6.6 — sem
   legenda alucinada em silêncio).
 - Numeração sequencial e sem sobreposição entre blocos consecutivos.
+- Falante (docs/diarizacao, D-019): quando ``CaptionSegment.speaker``
+  existe, o texto ganha o prefixo ``[Nome] `` em SRT e VTT e ``Nome: ``
+  no TXT. ``speaker_names`` mapeia rótulo → nome exibido; sem nome
+  mapeado, usa o próprio rótulo. Sem falante, a saída é idêntica à antiga.
 """
 from __future__ import annotations
 
@@ -40,7 +44,8 @@ class SubtitleExporter:
         True
     """
 
-    def to_srt(self, segments: list[CaptionSegment]) -> str:
+    def to_srt(self, segments: list[CaptionSegment],
+               speaker_names: dict[str, str] | None = None) -> str:
         """Gera conteúdo SRT a partir de uma lista de segmentos.
 
         Args:
@@ -56,11 +61,12 @@ class SubtitleExporter:
                 f"{idx}\n"
                 f"{_format_srt_timestamp(seg.start)} --> "
                 f"{_format_srt_timestamp(seg.end)}\n"
-                f"{seg.text}\n"
+                f"{_caption_text(seg, speaker_names)}\n"
             )
         return "\n".join(blocks).rstrip() + "\n" if blocks else ""
 
-    def to_vtt(self, segments: list[CaptionSegment]) -> str:
+    def to_vtt(self, segments: list[CaptionSegment],
+               speaker_names: dict[str, str] | None = None) -> str:
         """Gera conteúdo WebVTT a partir de uma lista de segmentos.
 
         Args:
@@ -75,31 +81,52 @@ class SubtitleExporter:
             blocks.append(
                 f"{_format_vtt_timestamp(seg.start)} --> "
                 f"{_format_vtt_timestamp(seg.end)}\n"
-                f"{seg.text}\n"
+                f"{_caption_text(seg, speaker_names)}\n"
             )
         return "\n".join(blocks).rstrip() + "\n" if len(blocks) > 2 else "WEBVTT\n\n"
 
-    def save_srt(self, segments: list[CaptionSegment], path: str) -> None:
+    def to_txt(self, segments: list[CaptionSegment],
+               speaker_names: dict[str, str] | None = None) -> str:
+        """Texto corrido: ``[HH:MM:SS] texto`` ou ``[HH:MM:SS] Nome: texto``."""
+        lines = []
+        for seg in self._filter_valid(segments):
+            name = speaker_display_name(seg.speaker, speaker_names)
+            prefix = f"{name}: " if name else ""
+            lines.append(f"[{format_clock(seg.start)}] {prefix}{seg.text}\n")
+        return "".join(lines)
+
+    def save_txt(self, segments: list[CaptionSegment], path: str,
+                 speaker_names: dict[str, str] | None = None) -> None:
+        """Salva a transcrição corrida como .txt (UTF-8)."""
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(self.to_txt(segments, speaker_names))
+
+    def save_srt(self, segments: list[CaptionSegment], path: str,
+                 speaker_names: dict[str, str] | None = None) -> None:
         """Salva a lista de segmentos como arquivo .srt.
 
         Args:
             segments: Lista de CaptionSegment.
             path: Caminho do arquivo .srt a ser criado.
+            speaker_names: Rótulo do falante → nome exibido (opcional).
         """
-        content = self.to_srt(segments)
+        content = self.to_srt(segments, speaker_names)
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
         _logger.info("srt_saved", path=path, n_blocks=len(content.split("\n\n")))
 
-    def save_vtt(self, segments: list[CaptionSegment], path: str) -> None:
+    def save_vtt(self, segments: list[CaptionSegment], path: str,
+                 speaker_names: dict[str, str] | None = None) -> None:
         """Salva a lista de segmentos como arquivo .vtt.
 
         Args:
             segments: Lista de CaptionSegment.
             path: Caminho do arquivo .vtt a ser criado.
+            speaker_names: Rótulo do falante → nome exibido (opcional).
         """
-        content = self.to_vtt(segments)
+        content = self.to_vtt(segments, speaker_names)
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
@@ -122,6 +149,28 @@ class SubtitleExporter:
             and seg.end > seg.start
             and seg.start >= 0
         ]
+
+
+def speaker_display_name(speaker: str | None,
+                         speaker_names: dict[str, str] | None = None) -> str:
+    """Nome exibido do falante ('' quando não há falante)."""
+    if not speaker:
+        return ""
+    if speaker_names and speaker_names.get(speaker):
+        return speaker_names[speaker]
+    return speaker
+
+
+def _caption_text(seg: CaptionSegment,
+                  speaker_names: dict[str, str] | None) -> str:
+    name = speaker_display_name(seg.speaker, speaker_names)
+    return f"[{name}] {seg.text}" if name else seg.text
+
+
+def format_clock(seconds: float) -> str:
+    """Segundos → ``HH:MM:SS`` (relógio do .txt)."""
+    total = int(max(seconds, 0))
+    return f"{total // 3600:02d}:{total % 3600 // 60:02d}:{total % 60:02d}"
 
 
 def _format_srt_timestamp(seconds: float) -> str:

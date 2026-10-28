@@ -80,3 +80,44 @@ class TestOverlapCounter:
     def test_log_empty_does_not_raise(self):
         c = OverlapCounter()
         c.log("test")
+
+
+class TestOverlapCounterSweep:
+    """ALN-06 — sweep line, só falantes distintos (docs/diarizacao, ACH-05)."""
+
+    def test_same_speaker_overlap_is_not_counted(self):
+        c = OverlapCounter()
+        c.feed_segments([
+            {"speaker": "A", "start": 0, "end": 6},
+            {"speaker": "A", "start": 4, "end": 10},
+        ])
+        assert c.overlap_pct == 0.0
+
+    def test_exact_value_two_speakers(self):
+        c = OverlapCounter()
+        c.feed_segments([
+            {"speaker": "A", "start": 0, "end": 5},
+            {"speaker": "B", "start": 3, "end": 8},
+            {"speaker": "C", "start": 6, "end": 10},
+        ])
+        # overlap: 3–5 (A+B) e 6–8 (B+C) = 4 s de 10 s
+        assert c.overlap_pct == 40.0
+
+    def test_three_simultaneous_speakers_not_double_counted(self):
+        c = OverlapCounter()
+        c.feed_segments([
+            {"speaker": "A", "start": 0, "end": 10},
+            {"speaker": "B", "start": 0, "end": 10},
+            {"speaker": "C", "start": 0, "end": 10},
+        ])
+        assert c.overlap_pct == 100.0
+
+    def test_many_segments_fast(self):
+        import time
+        c = OverlapCounter()
+        c.feed_segments([{"speaker": "AB"[i % 2], "start": i, "end": i + 1.5}
+                         for i in range(20_000)])
+        t0 = time.perf_counter()
+        pct = c.overlap_pct
+        assert time.perf_counter() - t0 < 1.0
+        assert 40 < pct < 60

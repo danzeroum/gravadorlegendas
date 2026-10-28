@@ -5,7 +5,18 @@ Verifica padrões reais de segredo (GitHub PAT classic/fine-grained,
 Hugging Face, OpenAI, chaves privadas, hex longo) em TODO o conteúdo
 commitado da branch vs main. Nunca imprime o conteúdo dos arquivos —
 apenas nomes e padrões detectados.
+
+Além do conteúdo, verifica o **caminho** dos arquivos (Frente E0 do plano
+de diarização, ``docs/diarizacao/PLANO-IMPLEMENTACAO.md``): áudio, RTTM e
+voiceprints só podem existir no corpus sintético versionado. Gravações
+reais, anotações reais e dados biométricos nunca entram no git (R3).
+
+Uso:
+    python scripts/secret_scan_changed_files.py            # conteúdo + caminho (vs main)
+    python scripts/secret_scan_changed_files.py --tracked-paths
+        # só caminho, sobre TODOS os arquivos versionados (usado no CI)
 """
+import argparse
 import re
 import subprocess
 import sys
@@ -36,6 +47,50 @@ SECRET_PATTERNS = {
 }
 
 
+AUDIO_EXTENSIONS = {
+    ".wav", ".mp3", ".m4a", ".mp4", ".ogg", ".opus", ".flac", ".webm",
+}
+ALLOWED_AUDIO_DIR = "tests/fixtures/corpus/audio/"
+ALLOWED_RTTM_DIR = "tests/fixtures/corpus/rttm/"
+
+
+def classify_path(rel: str) -> str | None:
+    """Regra de privacidade violada pelo caminho, ou None se permitido.
+
+    Args:
+        rel: Caminho relativo à raiz do repositório (separador ``/``).
+    """
+    rel = rel.replace("\\", "/")
+    lower = rel.lower()
+    if "voiceprint" in lower:
+        return "voiceprint"
+    suffix = Path(lower).suffix
+    if suffix in AUDIO_EXTENSIONS and not rel.startswith(ALLOWED_AUDIO_DIR):
+        return "audio_fora_do_corpus"
+    if suffix == ".rttm" and not rel.startswith(ALLOWED_RTTM_DIR):
+        return "rttm_fora_do_corpus"
+    return None
+
+
+def tracked_files() -> list[str]:
+    out = subprocess.run(
+        ["git", "ls-files"],
+        cwd=str(ROOT), capture_output=True, text=True, check=True,
+    ).stdout
+    return [f for f in out.splitlines() if f.strip()]
+
+
+def scan_paths(paths: list[str]) -> int:
+    """Imprime e conta caminhos que violam as regras de privacidade."""
+    findings = 0
+    for rel in paths:
+        rule = classify_path(rel)
+        if rule:
+            findings += 1
+            print(f"  BLOQUEADO: {rel} [regra: {rule}]")
+    return findings
+
+
 def changed_files() -> list[Path]:
     out = subprocess.run(
         ["git", "diff", "--name-only", "--diff-filter=ACMRT",
@@ -45,10 +100,28 @@ def changed_files() -> list[Path]:
     return [ROOT / f for f in out.splitlines() if f.strip()]
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--tracked-paths", action="store_true",
+        help="Só checa caminhos, sobre todos os arquivos versionados.",
+    )
+    args = parser.parse_args(argv)
+
+    if args.tracked_paths:
+        paths = tracked_files()
+        print(f"Checando caminho de {len(paths)} arquivo(s) versionados...")
+        blocked = scan_paths(paths)
+        if blocked:
+            print(f"\n{blocked} arquivo(s) violam a regra de privacidade R3 "
+                  "(áudio/RTTM/voiceprint fora do corpus sintético).")
+            return 1
+        print("Nenhum áudio, RTTM ou voiceprint fora do corpus sintético.")
+        return 0
+
     files = changed_files()
     print(f"Analisando {len(files)} arquivo(s) alterados vs main...")
-    findings = 0
+    findings = scan_paths([str(p.relative_to(ROOT)) for p in files])
     for path in files:
         if not path.exists() or not path.is_file():
             continue

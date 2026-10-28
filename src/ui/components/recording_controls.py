@@ -1,4 +1,4 @@
-"""Barra de controles de gravação: seletor de dispositivo, botão principal, timer, erro, diarização."""
+"""Barra de controles de gravação: seletor de dispositivo, importar arquivo, botão principal, timer, erro, diarização."""
 import customtkinter as ctk
 from src.ui.theme import (
     Theme, BUTTON_HEIGHT, BUTTON_HEIGHT_PRIMARY,
@@ -13,11 +13,12 @@ class RecordingControls(ctk.CTkFrame):
         on_toggle_recording,
         on_refresh_devices,
         on_diarize_changed,
+        on_import=None,
     ):
         super().__init__(master, corner_radius=0, fg_color=Theme.SURFACE)
         self.grid_columnconfigure(1, weight=1)
 
-        # Linha 0: Origem | menu | refresh | botão principal | timer
+        # Linha 0: Origem | menu | refresh | importar | botão principal | timer
         ctk.CTkLabel(
             self, text="Origem:", font=Theme.label_bold(), text_color=Theme.TEXT,
         ).grid(row=0, column=0, padx=(PAD_LG, PAD_SM), pady=PAD_MD, sticky="w")
@@ -46,26 +47,40 @@ class RecordingControls(ctk.CTkFrame):
         install_focus_ring(self._refresh_btn)
         Tooltip(self._refresh_btn, "Atualizar lista de dispositivos")
 
+        # Importar arquivo (Frente J): vira "Cancelar" durante a importação.
+        self._importing = False
+        self._import_btn = ctk.CTkButton(
+            self, text="📂 Importar áudio…", height=BUTTON_HEIGHT,
+            font=Theme.button(),
+            fg_color=Theme.SURFACE_ELEVATED, text_color=Theme.TEXT,
+            border_width=1, border_color=Theme.BORDER,
+            hover_color=Theme.BORDER,
+            command=on_import or (lambda: None),
+        )
+        self._import_btn.grid(row=0, column=3, padx=PAD_SM, pady=PAD_MD)
+        install_focus_ring(self._import_btn)
+        Tooltip(self._import_btn, "Transcrever um arquivo gravado (mp3, m4a, mp4, wav, ogg…) separando os participantes (Ctrl+O)")
+
         self._primary_btn = ctk.CTkButton(
             self, text="▶ Iniciar transcrição",
             height=BUTTON_HEIGHT_PRIMARY, font=Theme.button(),
             fg_color=Theme.SUCCESS, hover_color=Theme.SUCCESS_HOVER,
             command=on_toggle_recording,
         )
-        self._primary_btn.grid(row=0, column=3, padx=PAD_MD, pady=PAD_MD)
+        self._primary_btn.grid(row=0, column=4, padx=PAD_MD, pady=PAD_MD)
         install_focus_ring(self._primary_btn)
 
         self._timer_lbl = ctk.CTkLabel(
             self, text="00:00:00", font=Theme.mono(), text_color=Theme.TEXT_MUTED,
         )
-        self._timer_lbl.grid(row=0, column=4, padx=PAD_MD, pady=PAD_MD, sticky="e")
+        self._timer_lbl.grid(row=0, column=5, padx=PAD_MD, pady=PAD_MD, sticky="e")
 
         # Linha 1: erro (esquerda) | diarização (direita)
         self._error_lbl = ctk.CTkLabel(
             self, text="", font=Theme.label(), text_color=Theme.DANGER,
             anchor="w",
         )
-        self._error_lbl.grid(row=1, column=0, columnspan=4, padx=PAD_LG, pady=(0, PAD_MD), sticky="w")
+        self._error_lbl.grid(row=1, column=0, columnspan=5, padx=PAD_LG, pady=(0, PAD_MD), sticky="w")
         self._error_lbl.grid_remove()
 
         self._diarize_var = ctk.BooleanVar(value=True)
@@ -74,7 +89,7 @@ class RecordingControls(ctk.CTkFrame):
             variable=self._diarize_var, font=Theme.label(),
             command=on_diarize_changed,
         )
-        self._diarize_cb.grid(row=1, column=4, padx=PAD_LG, pady=(0, PAD_MD), sticky="e")
+        self._diarize_cb.grid(row=1, column=5, padx=PAD_LG, pady=(0, PAD_MD), sticky="e")
         install_focus_ring(self._diarize_cb)
         Tooltip(self._diarize_cb, "Desligar se a CPU estiver muito alta; diarização ainda disponível no pós-processamento")
 
@@ -99,12 +114,38 @@ class RecordingControls(ctk.CTkFrame):
         self._error_lbl.grid_remove()
 
     def apply_state(self, state: RecordingState) -> None:
+        enabled = state.primary_button_enabled and not self._importing
         self._primary_btn.configure(
             text=state.primary_button_text,
-            state="normal" if state.primary_button_enabled else "disabled",
+            state="normal" if enabled else "disabled",
             fg_color=Theme.DANGER if state.state == RecordingState.RECORDING else Theme.SUCCESS,
             hover_color=Theme.DANGER_HOVER if state.state == RecordingState.RECORDING else Theme.SUCCESS_HOVER,
         )
+        if not self._importing:
+            self._import_btn.configure(
+                state="normal" if state.state == RecordingState.IDLE else "disabled")
+
+    def set_importing(self, importing: bool) -> None:
+        """Durante a importação: botão vira Cancelar e gravar fica bloqueado."""
+        self._importing = importing
+        if importing:
+            self._import_btn.configure(
+                text="✕ Cancelar importação", state="normal",
+                fg_color=Theme.DANGER, hover_color=Theme.DANGER_HOVER,
+                text_color="#FFFFFF",
+            )
+            self._primary_btn.configure(state="disabled")
+        else:
+            self._import_btn.configure(
+                text="📂 Importar áudio…", state="normal",
+                fg_color=Theme.SURFACE_ELEVATED, hover_color=Theme.BORDER,
+                text_color=Theme.TEXT,
+            )
+            self._primary_btn.configure(state="normal")
+
+    @property
+    def importing(self) -> bool:
+        return self._importing
 
     def set_timer(self, text: str) -> None:
         self._timer_lbl.configure(text=text)

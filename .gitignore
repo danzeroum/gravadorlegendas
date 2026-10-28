@@ -66,3 +66,15 @@ dist/
 # Relatórios de fidelidade de execução LOCAL — nunca commitados.
 # O CI publica os relatórios como artifacts (workflow), não no Git.
 artifacts/fidelity/
+
+# Privacidade (docs/diarizacao, regra R3): áudio real, anotações reais e
+# voiceprints nunca entram no git. O corpus sintético é a única exceção.
+corpus_real/
+voiceprints*
+*.rttm
+!tests/fixtures/corpus/rttm/*.rttm
+
+# Pasta de trabalho do agente (opencode): áudios e transcrições do usuário
+# nunca vão para o git — só o README de instruções.
+audios/*
+!audios/README.md

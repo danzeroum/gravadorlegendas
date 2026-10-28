@@ -143,3 +143,18 @@ class TestChunkFormatCompatibility:
         assert d.id == "42"
         assert d.kind == "input"
         assert d.backend == ""  # default
+
+
+def test_diarization_options_validated_when_present():
+    import copy
+
+    from src.config import settings, validate_settings
+
+    ok = copy.copy(settings)
+    ok.speaker_label_style = "letters"
+    assert not any("speaker_label_style" in e for e in validate_settings(ok))
+    bad = copy.copy(settings)
+    bad.speaker_label_style, bad.diarization_device = "emoji", "tpu"
+    errors = validate_settings(bad)
+    assert any("speaker_label_style" in e for e in errors)
+    assert any("diarization_device" in e for e in errors)

@@ -292,10 +292,11 @@ class TestDia03RealDiarization:
             )
 
     def test_diarization_process_contract_on_pseudo_speech(self, tmp_path):
+        # diarize_file usa pyannote.audio desde a Frente E (D-018).
         pytest.importorskip(
-            "diart",
-            reason="diart não instalado — requer extra '.[diarization]' "
-                   "(árvore pesada: torch + pyannote.audio)",
+            "pyannote.audio",
+            reason="pyannote.audio não instalado — requer extra "
+                   "'.[diarization]' (árvore pesada: torch)",
         )
         self._require_hf_token_reference()
 
@@ -326,3 +327,27 @@ class TestDia03RealDiarization:
             assert set(("speaker", "start", "end")) <= set(seg)
             assert seg["end"] > seg["start"]
             assert isinstance(seg["speaker"], str)
+
+    def test_offline_diarizer_der_within_budget(self):
+        """DIA-09: OfflineDiarizer real separa 2 pseudo-falantes alternados.
+
+        Orçamento frouxo (DER < 0.5): pseudo-fala sintética não representa
+        voz humana; o objetivo é provar integração ponta a ponta (modelo
+        real → turnos → DER), não qualidade.
+        """
+        pytest.importorskip(
+            "pyannote.audio",
+            reason="pyannote.audio não instalado — requer extra '.[diarization]'",
+        )
+        self._require_hf_token_reference()
+        from src.audio.offline_diarizer import OfflineDiarizer
+
+        scen = "two_speakers_no_overlap"
+        turns = OfflineDiarizer().diarize(
+            str(CORPUS_DIR / "audio" / f"{scen}.wav"), num_speakers=2,
+        )
+        hyp = [{"speaker": t.speaker, "start": t.start, "end": t.end}
+               for t in turns]
+        ref = parse_rttm(CORPUS_DIR / "rttm" / f"{scen}.rttm")
+        assert len({t.speaker for t in turns}) == 2
+        assert compute_der(ref, hyp) < 0.5
