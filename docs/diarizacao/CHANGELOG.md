@@ -47,3 +47,26 @@ python scripts/secret_scan_changed_files.py --tracked-paths
 ```
 
 **Requisitos:** PRIV-01, PRIV-02, PRIV-03 → `validated-local`.
+
+---
+
+## 2026-10-28 — Frente E1: fan-out de filas (ACH-01)
+
+**Descrição:** diarizador ganhou fila própria (`_diarization_audio_queue`);
+`_fanout_loop` publica em Whisper e diarizador. Diarizador e WAV de
+reprocessamento recebem áudio sem RNNoise (D-017).
+
+**Arquivos:** `src/audio/manager.py`, `tests/test_audio_fanout.py`,
+`docs/diarizacao/DECISOES.md`.
+
+**Comandos:**
+
+```text
+# sem a correção (git stash):
+pytest tests/test_audio_fanout.py -q  -> 3 failed, 1 passed
+# com a correção:
+pytest tests/test_audio_fanout.py tests/test_audio_manager.py \
+       tests/test_live_subtitle_export.py -q  -> 20 passed
+```
+
+**Requisitos:** FILA-01, FILA-02 → `validated-local`.

@@ -76,6 +76,11 @@ class AudioManager:
         self._audio_queue: multiprocessing.Queue = multiprocessing.Queue()
         self._transcript_queue: multiprocessing.Queue = multiprocessing.Queue()
         self._diarization_queue: multiprocessing.Queue = multiprocessing.Queue()
+        # Áudio para o diarizador em fila PRÓPRIA (D-017): uma
+        # multiprocessing.Queue entrega cada item a um único consumidor, então
+        # compartilhar ``_audio_queue`` fazia Whisper e diart disputarem os
+        # chunks (cada um recebia só parte do áudio).
+        self._diarization_audio_queue: multiprocessing.Queue = multiprocessing.Queue()
 
         self._recorded_chunks: list[bytes] = []
         self.recorded_wav: str | None = None
@@ -200,7 +205,7 @@ class AudioManager:
 
         if enable_diarization:
             self._diarizer = DiarizationProcess(
-                self._audio_queue, self._diarization_queue
+                self._diarization_audio_queue, self._diarization_queue
             )
             self._diarizer.start()
 
@@ -393,6 +398,8 @@ class AudioManager:
         Ordem do pipeline:
             captura -> mixagem opcional -> RNNoise opcional
                    -> [recorder + audio_queue (Whisper)]
+            captura -> mixagem opcional (sem RNNoise)
+                   -> [diarization_audio_queue + WAV de reprocessamento]
         """
         import queue as _q
 
@@ -412,6 +419,11 @@ class AudioManager:
                 # T4.3: se sistema está vazio, mix_frame repassa o mic
                 processed = self._mixer.mix_frame(mic_chunk, sys_chunk)
 
+            # Diarização e reprocessamento leem o áudio ANTES do RNNoise
+            # (regra R2 / D-009: o filtro degrada a fala e confunde os
+            # embeddings de voz).
+            unfiltered = processed
+
             # Frente C: aplica RNNoise, se ativo
             if self._noise_filter is not None and processed is not None:
                 try:
@@ -422,8 +434,9 @@ class AudioManager:
             if processed is None:
                 continue
 
-            # Mantém compatibilidade: armazena para _save_recorded_wav.
-            self._recorded_chunks.append(processed)
+            # WAV da sessão (_save_recorded_wav) só serve ao reprocessamento
+            # com diarização — guarda o áudio sem RNNoise.
+            self._recorded_chunks.append(unfiltered)
 
             # Fan-out para o recorder dual-track (se ativo) — separa
             # mic e sistema novamente para gravar em trilhos distintos.
@@ -448,6 +461,13 @@ class AudioManager:
                 self._audio_queue.put(processed)
             except Exception:
                 pass
+
+            # Alimenta o diarizador ao vivo, se ativo (fila própria).
+            if self._diarizer is not None:
+                try:
+                    self._diarization_audio_queue.put(unfiltered)
+                except Exception:
+                    pass
 
     def _collect_diarization_nowait(self):
         """Lê segmentos de diarização pendentes (non-blocking)."""
