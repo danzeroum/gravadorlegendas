@@ -103,8 +103,11 @@ Ordem e dependências:
 
 ```text
 E0 (privacidade) ─┐
-E1 (fila)  ───────┼─► H1 (métricas + baseline) ─► E (diarizador offline) ─► F (palavra) ─► G (2 faixas) ─► H2 (CI/report) ─► I (voiceprints, condicional)
+E1 (fila)  ───────┼─► H1 (métricas + baseline) ─► E (diarizador offline) ─► F (palavra) ─┬─► G (2 faixas) ─► H2 (CI/report) ─► I (voiceprints, condicional)
+                                                                                        └─► J (importar arquivo na UI)
 ```
+
+J e G são independentes entre si: J pode ser entregue logo após F.
 
 H1 vem antes de E de propósito: sem baseline medido, não há como provar que
 E/F/G melhoraram algo.
@@ -463,6 +466,114 @@ de `confusion` no cenário de duas faixas.
 
 ---
 
+### Frente J — Importar e transcrever arquivo de áudio/vídeo
+
+**Objetivo de usuário:** "gravei no celular; abro o arquivo no
+gravadorLegendas e recebo a transcrição separada em Participante A, B, C…".
+
+**Depende de:** F. **Tamanho:** M.
+
+**J.a — Pipeline de arquivo reutilizável** (`src/audio/file_pipeline.py`)
+
+Tirar a lógica de `scripts/transcribe_file.py` para `src/` (a UI não importa
+`scripts/`). O script vira um wrapper fino da mesma função.
+
+```python
+@dataclass
+class FileTranscript:
+    source: str
+    duration_s: float
+    segments: list[CaptionSegment]      # com .speaker preenchido
+    speakers: dict[str, str]            # SPEAKER_00 -> "Participante A"
+    diarized: bool                      # False se diarização indisponível
+
+
+def transcribe_audio_file(path: str, *, num_speakers: int | None = None,
+                          label_style: str = settings.speaker_label_style,
+                          on_progress: Callable[[float], None] | None = None,
+                          cancel: threading.Event | None = None) -> FileTranscript: ...
+```
+
+- **Formatos:** `.wav .mp3 .m4a .mp4 .ogg .opus .flac .webm` (inclui áudio de
+  WhatsApp e vídeo de celular; `.mp4` usa só a faixa de áudio).
+- **Decodificação:** `decode_to_wav16k(path) -> Path` com **PyAV** (`av`, já
+  instalado como dependência do faster-whisper) — sem exigir `ffmpeg` no
+  sistema. Saída mono 16 kHz em `tempfile`, apagada ao final (R1). O mesmo WAV
+  alimenta Whisper e diarizador, para os tempos baterem.
+- **Fluxo:** decodificar → `OfflineDiarizer.check_ready()` → transcrever com
+  `word_timestamps=True` → diarizar (`num_speakers` se informado) →
+  `assign_words` → `group_segments` → rotular.
+- **Sem diarização disponível** (sem extra ou sem `HF_TOKEN`): transcreve
+  mesmo assim, `diarized=False`, e a UI avisa o motivo exato (mensagem do
+  `check_ready`). Nunca falha a transcrição por causa da separação de voz.
+- **Progresso:** fração = fim do último segmento do Whisper / duração; a
+  diarização reporta como etapa ("Separando vozes…"). `cancel` checado entre
+  segmentos.
+
+**J.b — Rótulos "Participante A, B, C"** (`src/audio/speaker_labels.py`)
+
+```python
+def friendly_labels(turns: list[SpeakerTurn], *, style: str = "letters",
+                    prefix: str = "Participante") -> dict[str, str]:
+    """Ordem da primeira fala: 1º a falar = A. letters: A..Z, AA, AB…;
+    numbers: Participante 1, 2…; raw: SPEAKER_00."""
+```
+
+- Config: `SPEAKER_LABEL_STYLE=letters|numbers|raw` (padrão `letters`),
+  `SPEAKER_LABEL_PREFIX` (padrão `Participante`). Atualizar `.env.example`.
+- Os rótulos entram como **nomes padrão** no speaker map existente
+  (`{sid: {name, color}}`); o usuário renomeia "Participante A" → "Juliana" no
+  painel Falantes e a exportação usa o nome novo.
+- CLI: `transcribe_file.py --diarize --labels letters`.
+
+**J.c — Interface**
+
+- Botão **"📂 Importar áudio…"** nos controles de gravação + atalho `Ctrl+O`
+  (registrar em `src/ui/shortcuts.py` e na tabela de atalhos do README).
+  Desabilitado enquanto grava; gravar fica desabilitado enquanto importa.
+- `tkinter.filedialog.askopenfilename` com filtro "Áudio e vídeo" pelos
+  formatos acima.
+- Diálogo curto antes de começar: "Nº de participantes (opcional)" e
+  modelo Whisper (padrão `STT_MODEL`; sugerir `small` para fala natural).
+- Execução em **processo separado** (mesmo padrão `spawn` do
+  `TranscriberProcess`, para não travar a UI nem deadlockar com
+  torch/tkinter); status bar mostra etapa e %; botão Cancelar.
+- Resultado no painel de transcrição como `[00:01:12] Participante A: texto`,
+  linhas do painel Falantes criadas automaticamente, e os botões existentes
+  (Copiar, Salvar .txt, Exportar .md) funcionando sobre o resultado; acrescentar
+  "Exportar .srt/.vtt" se ainda não houver na UI.
+- Arquivos de saída: por padrão em `settings.recording_dir` com o nome base do
+  original (`audio_celular.mp3` → `audio_celular.txt/.srt/.vtt/.md`), sem
+  sobrescrever sem confirmação.
+
+**Limitações a declarar na UI/README (honestas)**
+- Celular grava **uma faixa só**: a separação depende só do timbre. Vozes
+  parecidas, fala sobreposta e aparelho longe dos falantes aumentam a troca
+  de participante. Informar o nº de participantes ajuda.
+- Rótulos A/B/C valem **por arquivo**: o "Participante A" de um arquivo não é
+  a mesma pessoa do "A" de outro (identificação persistente é a Frente I).
+- Tempo de processamento depende de modelo, CPU/GPU e duração; a UI mostra
+  progresso, não promessa de tempo.
+
+**Testes**
+- `decode_to_wav16k` (`importorskip("av")`): gerar mp3, m4a e mp4 sintéticos
+  em `tmp_path` com PyAV a partir de uma senoide → WAV mono 16 kHz, duração
+  ±1 frame; arquivo corrompido → erro acionável; temporário removido.
+- `friendly_labels`: ordem da primeira fala; 27º falante = `AA`; estilos
+  `numbers` e `raw`; prefixo customizado.
+- `transcribe_audio_file` com Whisper e diarizador mockados: segmentos com
+  `speaker`; sem diarização → `diarized=False` e texto presente; `cancel`
+  interrompe; `on_progress` monotônico até 1.0.
+- UI (mesmo estilo de `tests/test_ui_shortcuts.py`): `Ctrl+O` chama o handler;
+  importação bloqueada durante gravação; resultado popula painel Falantes.
+- Real (`requires_hf_token`): `three_speakers.wav` convertido para mp3 →
+  3 participantes A/B/C.
+
+**Aceite:** IMP-01..07 `validated-ci`; teste manual registrado no CHANGELOG
+com um áudio de celular do operador (sem versionar o áudio — R3).
+
+---
+
 ### Frente H2 — Métricas no relatório de fidelidade e no CI
 
 **Depende de:** G. **Tamanho:** P.
@@ -544,6 +655,13 @@ Status conforme a convenção de `docs/qualidade-audio/PLANO-IMPLEMENTACAO.md`.
 | FUS-04 | Dedupe de vazamento mic←alto-falante | G | idem | sintético/offline | pending |
 | FUS-05 | Fixture determinística de duas faixas | G | `scripts/gen_fidelity_fixtures.py` | sintético/offline | pending |
 | FUS-06 | Confusão cai no cenário de duas faixas (medido) | G | `eval_diarization.py` | requer-modelo-hf | pending |
+| IMP-01 | mp3/m4a/mp4/ogg/opus/flac/webm → WAV 16 kHz mono via PyAV | J | `src/audio/file_pipeline.py` | integração-real-lib | pending |
+| IMP-02 | Pipeline de arquivo compartilhado por CLI e UI | J | idem, `scripts/transcribe_file.py` | sintético/offline | pending |
+| IMP-03 | Rótulos Participante A, B, C por ordem de fala | J | `src/audio/speaker_labels.py` | sintético/offline | pending |
+| IMP-04 | Sem diarização disponível → transcreve e avisa | J | `src/audio/file_pipeline.py` | sintético/offline | pending |
+| IMP-05 | Botão Importar + `Ctrl+O`, bloqueado durante gravação | J | `src/ui/app.py`, `recording_controls.py`, `shortcuts.py` | sintético/offline | pending |
+| IMP-06 | Progresso e cancelamento sem travar a UI | J | idem | integração-real-lib | pending |
+| IMP-07 | Resultado popula transcrição, painel Falantes e exportações | J | `results_panel.py`, `subtitle_exporter.py` | sintético/offline | pending |
 | REL-01 | Seção `diarization` opcional no schema | H2 | `schemas/…v1.json` | sintético/offline | pending |
 | REL-02 | Report incorpora `eval_diarization` | H2 | `build_fidelity_report.py` | sintético/offline | pending |
 | REL-03 | Nightly publica métricas de diarização | H2 | `audio-fidelity.yml` | requer-modelo-hf | pending |
@@ -619,8 +737,11 @@ Alternativas / Consequências / Reverter). Numeração continua a existente.
 | E | M | 3–5 dias |
 | F | M | 3–5 dias |
 | G | M | 3–5 dias |
+| J | M | 3–5 dias; entregável ao usuário logo após F |
 | H2 | P | 1–2 dias |
 | I | M | 3–5 dias, **após** RIPD e consentimento |
 
-Caminho crítico sem a Frente I: ~3–4 semanas de trabalho do agente, mais o
-tempo humano de anotar 3–5 reuniões em RTTM.
+Caminho crítico sem a Frente I: ~4–5 semanas de trabalho do agente, mais o
+tempo humano de anotar 3–5 reuniões em RTTM. Caminho mais curto até
+"importar áudio do celular com Participante A/B/C na UI": E0 → E1 → H1 → E →
+F → J (~3 semanas).
