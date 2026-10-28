@@ -270,3 +270,50 @@ vozes pt-BR, 15,3 s, `.mp3`):
 `HF_TOKEN` e aceite dos termos) e qualidade em gravação humana de celular.
 
 **Requisitos:** IMP-01..07 → `validated-local`.
+
+---
+
+## 2026-10-28 — Correção: `find_spec` sem o extra de diarização
+
+**Achado** (teste de instalação limpa sem `.[diarization]`):
+`importlib.util.find_spec("pyannote.audio")` **lança** `ModuleNotFoundError`
+quando o pacote pai `pyannote` não existe. `OfflineDiarizer.check_ready()`
+usava essa chamada, então importar/transcrever um arquivo **quebrava** em vez
+de transcrever sem separar participantes. O teste unitário antigo substituía
+`find_spec` e escondia o problema.
+
+**Correção:** `module_available()` em `src/audio/offline_diarizer.py`; o teste
+agora simula o pacote pai ausente (`sys.modules["pyannote"] = None`).
+Verificado: o teste falha com o código antigo e passa com a correção.
+
+---
+
+## 2026-10-28 — Uso pelo opencode
+
+**Descrição:** o repositório passa a ser operável pelo opencode com pedidos
+em português ("transcreva o áudio XPTO"):
+- `AGENTS.md` (lido automaticamente pelo opencode): identidade, fluxo de
+  transcrição, tabela de códigos de saída, pedidos frequentes, regras de
+  privacidade/fidelidade e mapa do repositório.
+- `.opencode/commands/`: `/transcrever`, `/renomear`, `/resumir`, `/audios`,
+  `/verificar` (formato conferido na documentação oficial do opencode).
+- `opencode.json`: libera só o script de transcrição e `ls`; o resto pede
+  confirmação.
+- `scripts/transcrever_audio.py`: acha o áudio pelo nome (sem extensão,
+  maiúsculas ou acentos) em `audios/`, raiz e `data/recordings`; transcreve com
+  separação de participantes quando disponível; grava `.txt/.srt/.vtt/.md/.json`
+  em `audios/transcricoes/`; reaproveita transcrição existente;
+  `--renomear` sem retranscrever; `--listar`; `--verificar`; bloco
+  `=== RESULTADO ===` e códigos de saída para o agente.
+- `scripts/setup_ambiente.sh` (`--separar-participantes` para o extra de
+  diarização); `audios/` com README, conteúdo fora do git.
+
+**Comandos:**
+
+```text
+pytest tests/test_transcrever_audio.py tests/test_offline_diarizer.py -q -> 33 passed
+pytest tests/ -q -> 2 failed (test_ocr: Tesseract ausente), 646 passed, 40 skipped
+# Cópia limpa do repo + setup_ambiente.sh (python3.11, sem diarização):
+transcrever_audio.py --verificar -> aponta "--separar-participantes"
+transcrever_audio.py conversa   -> 3 trechos, "não separados — pyannote.audio não instalado…", rc=0
+```

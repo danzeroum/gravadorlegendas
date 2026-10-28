@@ -201,6 +201,31 @@ A interface respeita `APP_WIDGET_SCALING` (env) ou a preferência persistida em 
 - A aba Áudio funciona normalmente (PipeWire é independente da sessão gráfica).
 - Para OCR de tela, use sessão X11.
 
+### Usar com o opencode (transcrever pedindo em português)
+
+O repositório já vem configurado para o [opencode](https://opencode.ai):
+`AGENTS.md` ensina o agente a usar as ferramentas, `.opencode/commands/` traz
+comandos prontos e `opencode.json` libera o script de transcrição sem pedir
+permissão a cada vez.
+
+```bash
+bash scripts/setup_ambiente.sh                          # 1ª vez: transcrição
+bash scripts/setup_ambiente.sh --separar-participantes  # + separar vozes (A, B, C…)
+```
+
+Depois, coloque o áudio em `audios/`, abra o `opencode` na pasta do projeto e
+peça, por exemplo:
+
+- "transcreva o áudio reuniao_segunda" (ou `/transcrever reuniao_segunda`)
+- "são 3 pessoas, use o modelo small"
+- "o participante A é a Juliana e o B é o Daniel" (ou `/renomear`)
+- "faça a ata com decisões e pendências" (ou `/resumir reuniao_segunda`)
+- `/audios` (lista) · `/verificar` (checa o ambiente)
+
+As transcrições ficam em `audios/transcricoes/` (`.txt`, `.srt`, `.vtt`, `.md`,
+`.json`). Nada de `audios/` vai para o git. Sem o opencode, o mesmo fluxo é
+`.venv/bin/python scripts/transcrever_audio.py reuniao_segunda`.
+
 ### Importar um áudio gravado (celular, WhatsApp, Teams…)
 
 1. Clique em **📂 Importar áudio…** (ou `Ctrl+O`) e escolha o arquivo

@@ -73,3 +73,8 @@ corpus_real/
 voiceprints*
 *.rttm
 !tests/fixtures/corpus/rttm/*.rttm
+
+# Pasta de trabalho do agente (opencode): áudios e transcrições do usuário
+# nunca vão para o git — só o README de instruções.
+audios/*
+!audios/README.md

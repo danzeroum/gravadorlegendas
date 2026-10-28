@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      ".venv/bin/python scripts/transcrever_audio.py *": "allow",
+      ".venv\\Scripts\\python scripts/transcrever_audio.py *": "allow",
+      "python scripts/transcrever_audio.py *": "allow",
+      "python3 scripts/transcrever_audio.py *": "allow",
+      "ls *": "allow"
+    }
+  }
+}
