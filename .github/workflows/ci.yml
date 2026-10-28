@@ -23,6 +23,9 @@ jobs:
       # Config de flake8 declarada em pyproject.toml [tool.flake8]
       # (max-line-length=100, extend-ignore=E501,W503,E203).
       - run: flake8 src/ --max-line-length=100 --extend-ignore=E501,W503,E203
+      # Privacidade (docs/diarizacao, Frente E0): bloqueia áudio, RTTM e
+      # voiceprints versionados fora do corpus sintético.
+      - run: python scripts/secret_scan_changed_files.py --tracked-paths
 
   test:
     runs-on: ubuntu-latest
