@@ -99,3 +99,64 @@ def wer_cer(
         "wer": wer(reference, hypothesis, **norm_kwargs),
         "cer": cer(reference, hypothesis, **norm_kwargs),
     }
+
+
+# ---------------------------------------------------------------------------
+# Métricas com falante (docs/diarizacao, Frente H1)
+# ---------------------------------------------------------------------------
+
+def _word_errors(ref: str, hyp: str) -> int:
+    """Substituições + deleções + inserções (palavras) entre textos já
+    normalizados. Vazios tratados à parte (jiwer exige referência)."""
+    ref_n = len(ref.split())
+    hyp_n = len(hyp.split())
+    if ref_n == 0:
+        return hyp_n
+    if hyp_n == 0:
+        return ref_n
+    out = jiwer.process_words(ref, hyp)
+    return int(out.substitutions + out.deletions + out.insertions)
+
+
+def cp_wer(
+    reference: dict[str, str],
+    hypothesis: dict[str, str],
+    **norm_kwargs,
+) -> float:
+    """Concatenated minimum-permutation WER (cpWER).
+
+    Args:
+        reference: falante -> texto concatenado de todas as falas dele.
+        hypothesis: idem, com os rótulos da diarização (IDs locais).
+
+    Monta a matriz de erros ref_i × hyp_j (completada com falantes vazios
+    até ficar quadrada) e escolhe a associação de falantes de menor erro
+    total (``scipy.optimize.linear_sum_assignment``). Rótulos trocados de
+    forma consistente não contam como erro; falante a mais ou a menos na
+    hipótese conta suas palavras como inserção ou deleção.
+
+    Returns:
+        erros_totais / palavras_da_referência (0.0 = perfeito).
+    """
+    from scipy.optimize import linear_sum_assignment
+
+    refs = [normalize_pt(t, **norm_kwargs) for t in reference.values()]
+    hyps = [normalize_pt(t, **norm_kwargs) for t in hypothesis.values()]
+    size = max(len(refs), len(hyps), 1)
+    refs += [""] * (size - len(refs))
+    hyps += [""] * (size - len(hyps))
+
+    total_ref_words = sum(len(r.split()) for r in refs)
+    cost = [[_word_errors(r, h) for h in hyps] for r in refs]
+    rows, cols = linear_sum_assignment(cost)
+    errors = sum(cost[i][j] for i, j in zip(rows, cols))
+    if total_ref_words == 0:
+        return 0.0 if errors == 0 else 1.0
+    return errors / total_ref_words
+
+
+def speaker_coverage(speakers: list) -> float:
+    """Fração de palavras que receberam falante (``None`` = sem rótulo)."""
+    if not speakers:
+        return 0.0
+    return sum(1 for s in speakers if s is not None) / len(speakers)

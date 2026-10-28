@@ -70,3 +70,52 @@ pytest tests/test_audio_fanout.py tests/test_audio_manager.py \
 ```
 
 **Requisitos:** FILA-01, FILA-02 → `validated-local`.
+
+---
+
+## 2026-10-28 — Frente H1: ferramentas de medição e baseline
+
+**Descrição:**
+- `tests/fidelity/text_metrics.py`: `cp_wer` (associação ótima de falantes
+  via `linear_sum_assignment`) e `speaker_coverage`.
+- `src/audio/rttm.py`: leitura/escrita de RTTM compartilhada (o parser do
+  teste DIA não podia ser importado fora do pytest por causa do
+  `importorskip` de módulo).
+- `src/audio/file_decode.py`: `decode_to_wav16k` com PyAV (mp3, m4a, mp4,
+  ogg/opus, flac, webm, wav → WAV 16 kHz mono). Base de IMP-01 (Frente J).
+- `scripts/corpus_real.py`: `init/add/import-labels/verify/purge`; recusa
+  diretório dentro do repo; sha256, consentimento e retenção por item.
+- `scripts/eval_diarization.py`: pipelines `oracle`, `rttm`, `current`,
+  `offline`; DER e componentes via `pyannote.metrics`; cpWER e cobertura
+  quando há palavras; `--compare` com exit ≠0 em regressão. JSON só com IDs
+  e números.
+
+**Arquivos:** os acima + `tests/fidelity/test_speaker_text_metrics.py`,
+`tests/test_corpus_real.py`, `tests/test_eval_diarization.py`,
+`tests/test_file_decode.py`, `tests/media_fixtures.py`.
+
+**Comandos:**
+
+```text
+pytest tests/test_eval_diarization.py tests/test_corpus_real.py \
+       tests/fidelity/test_speaker_text_metrics.py tests/test_file_decode.py -q
+  -> 37 passed   (com pyannote.metrics 4.2.0 e PyAV 18.1.0 instalados)
+
+python scripts/eval_diarization.py --corpus tests/fixtures/corpus --pipeline oracle
+  pipeline=oracle corpus=corpus ok=4 erro=0
+    der: 0.0000  confusion: 0.0000  false_alarm: 0.0000  missed: 0.0000
+
+python scripts/eval_diarization.py --corpus tests/fixtures/corpus --pipeline current
+  pipeline=current corpus=corpus ok=0 erro=4
+    ERRO two_speakers_no_overlap: RuntimeError: diart não instalado. pip install diart
+    (idem nos 4 cenários)
+```
+
+**Baseline (AVL-05):** o pipeline atual **não é executável** neste ambiente
+— exige diart + modelo `pyannote/embedding` (gated, `HF_TOKEN`). O harness
+está validado pelo `oracle` (DER 0) e pelo `rttm` deslocado (DER detectado).
+A medição do pipeline atual fica para quem tiver token:
+`python scripts/eval_diarization.py --corpus tests/fixtures/corpus --pipeline current --out base.json`.
+Corpus real: nenhum disponível neste ambiente (esperado — R3).
+
+**Requisitos:** AVL-01..04 → `validated-local`; AVL-05 → `skipped-no-model`.
