@@ -164,9 +164,18 @@ def test_waveform_in_memory_and_speaker_kwargs(wav):
 # ---------------------------------------------------------------------------
 
 def test_check_ready_without_pyannote(monkeypatch):
-    monkeypatch.setattr(od.importlib.util, "find_spec", lambda name: None)
+    # Reproduz o ambiente real sem o extra: o pacote PAI "pyannote" não
+    # existe, caso em que find_spec("pyannote.audio") lança em vez de
+    # devolver None (bug achado no teste de instalação limpa).
+    monkeypatch.setitem(sys.modules, "pyannote", None)
+    monkeypatch.delitem(sys.modules, "pyannote.audio", raising=False)
     with pytest.raises(DiarizationUnavailable, match=r"\.\[diarization\]"):
         OfflineDiarizer(model_id="m/x").check_ready()
+
+
+def test_module_available_handles_missing_parent():
+    assert od.module_available("pacote_que_nao_existe.sub") is False
+    assert od.module_available("json") is True
 
 
 def test_check_ready_without_token(monkeypatch):

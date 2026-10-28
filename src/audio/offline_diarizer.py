@@ -112,6 +112,19 @@ def _read_wav(path: str | Path) -> tuple[np.ndarray, int]:
     return audio.reshape(-1, channels).T.copy(), rate
 
 
+def module_available(name: str) -> bool:
+    """``find_spec`` seguro para submódulos.
+
+    ``importlib.util.find_spec("pyannote.audio")`` **lança**
+    ``ModuleNotFoundError`` quando o pacote pai (``pyannote``) não existe, em
+    vez de devolver None — e a ausência do extra é justamente o caso comum.
+    """
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
 def find_hf_token() -> str | None:
     """Token HF do ambiente ou do ``huggingface-cli login`` (nunca logado)."""
     for name in _TOKEN_ENVS:
@@ -160,7 +173,7 @@ class OfflineDiarizer:
         """Falha cedo, sem baixar nada, se a diarização não puder rodar."""
         if self._pipeline is not None:
             return
-        if importlib.util.find_spec("pyannote.audio") is None:
+        if not module_available("pyannote.audio"):
             raise DiarizationUnavailable(
                 "Separação de falantes indisponível: pyannote.audio não "
                 "instalado. Instale com: pip install -e \".[diarization]\""
