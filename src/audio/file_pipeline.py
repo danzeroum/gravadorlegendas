@@ -21,6 +21,7 @@ import structlog
 from src.audio.file_decode import decode_to_wav16k, wav_duration_s
 from src.audio.models import CaptionSegment
 from src.audio.speaker_assignment import Word, assign_words, group_segments
+from src.audio.speaker_labels import friendly_labels
 from src.config import settings
 
 _logger = structlog.get_logger()
@@ -96,6 +97,8 @@ def transcribe_audio_file(
     min_speakers: int | None = None,
     max_speakers: int | None = None,
     diarizer=None,
+    label_style: str | None = None,
+    label_prefix: str | None = None,
     on_progress: ProgressCallback | None = None,
     cancel: threading.Event | None = None,
 ) -> FileTranscript:
@@ -110,6 +113,8 @@ def transcribe_audio_file(
             seguir sem falantes.
         num_speakers / min_speakers / max_speakers: Dicas ao diarizador.
         diarizer: ``OfflineDiarizer`` (injeção para testes).
+        label_style / label_prefix: Rótulos amigáveis em ``speakers``
+            (padrão: ``SPEAKER_LABEL_STYLE`` / ``SPEAKER_LABEL_PREFIX``).
         on_progress: ``callback(fração 0..1, etapa)``.
         cancel: Evento; quando setado, interrompe com
             :class:`TranscriptionCancelled`.
@@ -166,7 +171,7 @@ def transcribe_audio_file(
                 continue
             plain.append(CaptionSegment(float(seg.start), float(seg.end), text))
             seg_words = [
-                Word(float(w.start), float(w.end), w.word.strip())
+                Word(float(w.start), float(w.end), w.word)
                 for w in (getattr(seg, "words", None) or [])
                 if (w.word or "").strip() and w.end > w.start
             ]
@@ -201,6 +206,12 @@ def transcribe_audio_file(
         result.words = assigned
         result.segments = group_segments(assigned)
         result.diarized = True
+        result.speakers = friendly_labels(
+            [s.speaker for s in result.segments],
+            style=label_style or settings.speaker_label_style,
+            prefix=(settings.speaker_label_prefix if label_prefix is None
+                    else label_prefix),
+        )
         progress(1.0, "Concluído")
         _logger.info("file_transcribed", duration_s=round(duration, 1),
                      segments=len(result.segments),
@@ -208,3 +219,93 @@ def transcribe_audio_file(
         return result
     finally:
         Path(wav).unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Importação em processo separado (UI, Frente J)
+# ---------------------------------------------------------------------------
+
+def transcript_to_dict(result: FileTranscript) -> dict:
+    """Serializa para atravessar a fila entre processos (sem as palavras)."""
+    return {
+        "source": result.source,
+        "duration_s": result.duration_s,
+        "segments": [
+            {"start": s.start, "end": s.end, "text": s.text, "speaker": s.speaker}
+            for s in result.segments
+        ],
+        "diarized": result.diarized,
+        "diarization_error": result.diarization_error,
+        "speakers": dict(result.speakers),
+    }
+
+
+def transcript_from_dict(data: dict) -> FileTranscript:
+    return FileTranscript(
+        source=data["source"],
+        duration_s=data["duration_s"],
+        segments=[CaptionSegment(s["start"], s["end"], s["text"], s.get("speaker"))
+                  for s in data["segments"]],
+        diarized=data["diarized"],
+        diarization_error=data.get("diarization_error"),
+        speakers=dict(data.get("speakers") or {}),
+    )
+
+
+def run_import_job(path: str, options: dict, out_queue, cancel) -> None:
+    """Alvo do processo de importação: publica eventos em ``out_queue``.
+
+    Eventos: ``{"progress": f, "stage": s}``, e por fim um de
+    ``{"result": dict}``, ``{"cancelled": True}`` ou ``{"error": msg}``.
+    Roda em processo ``spawn`` (mesmo motivo do ``TranscriberProcess``:
+    evitar deadlock de fork com torch/ctranslate2/tkinter).
+    """
+    def on_progress(fraction: float, stage: str) -> None:
+        out_queue.put({"progress": fraction, "stage": stage})
+
+    try:
+        result = transcribe_audio_file(path, on_progress=on_progress,
+                                       cancel=cancel, **options)
+        out_queue.put({"result": transcript_to_dict(result)})
+    except TranscriptionCancelled:
+        out_queue.put({"cancelled": True})
+    except ImportError as e:
+        out_queue.put({"error": f"Dependência ausente: {e}. "
+                                "Instale com: pip install -e \".[audio]\""})
+    except Exception as e:
+        out_queue.put({"error": str(e) or type(e).__name__})
+
+
+def output_base_for(source: str | Path, directory: str | Path) -> Path:
+    """Base dos arquivos de saída em ``directory`` sem sobrescrever nada.
+
+    ``audio_celular.mp3`` → ``<dir>/audio_celular``; se já houver legenda
+    com esse nome, ``audio_celular_2``, ``_3``…
+    """
+    directory = Path(directory)
+    stem = Path(source).stem
+    base = directory / stem
+    n = 2
+    while any(base.with_suffix(ext).exists() for ext in (".txt", ".srt", ".vtt")):
+        base = directory / f"{stem}_{n}"
+        n += 1
+    return base
+
+
+def write_transcript_files(result: FileTranscript, base: str | Path,
+                           speaker_names: dict[str, str] | None = None,
+                           formats: tuple[str, ...] = ("txt", "srt", "vtt"),
+                           ) -> list[Path]:
+    """Grava .txt/.srt/.vtt com os nomes dos falantes."""
+    from src.storage.subtitle_exporter import SubtitleExporter
+
+    names = {**result.speakers, **(speaker_names or {})}
+    base = Path(base)
+    base.parent.mkdir(parents=True, exist_ok=True)
+    exporter = SubtitleExporter()
+    written = []
+    for fmt in formats:
+        path = base.with_suffix(f".{fmt}")
+        getattr(exporter, f"save_{fmt}")(result.segments, str(path), names)
+        written.append(path)
+    return written

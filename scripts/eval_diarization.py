@@ -233,6 +233,7 @@ def evaluate_item(item: dict, result: dict) -> dict:
     }
     words = result.get("words")
     if words is not None:
+        from src.audio.speaker_assignment import join_words
         from tests.fidelity.text_metrics import cp_wer, speaker_coverage
 
         row["coverage"] = round(speaker_coverage([w["speaker"] for w in words]), 4)
@@ -245,7 +246,7 @@ def evaluate_item(item: dict, result: dict) -> dict:
                     hyp_text.setdefault(str(w["speaker"]), []).append(w["text"])
             row["cp_wer"] = round(cp_wer(
                 read_transcript(item["transcript"]),
-                {k: " ".join(v) for k, v in hyp_text.items()},
+                {k: join_words(v) for k, v in hyp_text.items()},
             ), 4)
     return row
 

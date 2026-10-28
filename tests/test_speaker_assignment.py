@@ -92,3 +92,10 @@ def test_regression_batch_with_two_speakers_gets_two_labels():
     segs = group_segments(assign_words(words, turns))
     assert [s.speaker for s in segs] == ["SPEAKER_00", "SPEAKER_01"]
     assert pytest.approx(segs[1].start) == 3.7
+
+
+def test_join_respects_whisper_word_boundaries():
+    """Pedaço sem espaço inicial continua a palavra anterior ("tisco-ci")."""
+    assigned = [(W(0.0, 0.3, " para"), "A"), (W(0.4, 0.7, " tisco"), "A"),
+                (W(0.7, 0.9, "-ci!"), "A")]
+    assert group_segments(assigned)[0].text == "para tisco-ci!"

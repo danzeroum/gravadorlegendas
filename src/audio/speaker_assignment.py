@@ -19,7 +19,10 @@ from src.audio.models import CaptionSegment
 
 @dataclass(frozen=True)
 class Word:
-    """Palavra transcrita com tempo absoluto (segundos)."""
+    """Palavra transcrita com tempo absoluto (segundos).
+
+    ``text`` mantém o espaço inicial do Whisper (marca de início de palavra).
+    """
 
     start: float
     end: float
@@ -86,8 +89,18 @@ def assign_words(words: Iterable[Word], turns: Iterable, *,
     return out
 
 
-def _join(words: list[Word]) -> str:
-    return " ".join(t for t in (w.text.strip() for w in words) if t)
+def join_words(texts: list[str]) -> str:
+    """Junta textos de palavras em uma frase.
+
+    O Whisper marca início de palavra com espaço à esquerda (``" dia"``) e
+    continuação sem espaço (``"-ci"``, pedaço da mesma palavra). Se as
+    palavras trazem essa marcação, concatena preservando-a; se nenhuma traz
+    (outra fonte), separa por espaço.
+    """
+    texts = [t for t in texts if t.strip()]
+    if any(t[:1].isspace() for t in texts[1:]):
+        return "".join(texts).strip()
+    return " ".join(t.strip() for t in texts)
 
 
 def group_segments(assigned: list[tuple[Word, str | None]], *,
@@ -106,7 +119,7 @@ def group_segments(assigned: list[tuple[Word, str | None]], *,
     speaker: str | None = None
 
     def flush():
-        text = _join(group)
+        text = join_words([w.text for w in group])
         if text and group[-1].end > group[0].start:
             segments.append(CaptionSegment(
                 start=group[0].start, end=group[-1].end, text=text,

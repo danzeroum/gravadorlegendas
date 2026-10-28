@@ -158,6 +158,11 @@ class Settings:
         "DIARIZATION_EXCLUSIVE", "true"
     ).lower() in ("1", "true", "yes")
 
+    # --- Rótulos de falante (docs/diarizacao, Frente J) ---
+    # letters: "Participante A, B, C"; numbers: "Participante 1, 2"; raw: SPEAKER_00
+    speaker_label_style: str = os.getenv("SPEAKER_LABEL_STYLE", "letters")
+    speaker_label_prefix: str = os.getenv("SPEAKER_LABEL_PREFIX", "Participante")
+
     @property
     def has_ollama(self) -> bool:
         return bool(self.ollama_username and self.ollama_password)
@@ -202,6 +207,13 @@ _VALID = {
     "stt_device": {"auto", "cpu", "cuda"},
 }
 
+# Opções da diarização (docs/diarizacao): validadas só quando presentes, para
+# não quebrar quem valida um objeto de configuração parcial.
+_VALID_OPTIONAL = {
+    "diarization_device": {"auto", "cpu", "cuda"},
+    "speaker_label_style": {"letters", "numbers", "raw"},
+}
+
 
 class ConfigValidationError(ValueError):
     """Erro de validação de configuração."""
@@ -219,6 +231,12 @@ def validate_settings(s=None) -> list[str]:
     for key, allowed in _VALID.items():
         value = getattr(s, key)
         if value not in allowed:
+            errors.append(
+                f"{key}={value!r} inválido. Valores aceitos: {sorted(allowed)}"
+            )
+    for key, allowed in _VALID_OPTIONAL.items():
+        value = getattr(s, key, None)
+        if value is not None and value not in allowed:
             errors.append(
                 f"{key}={value!r} inválido. Valores aceitos: {sorted(allowed)}"
             )

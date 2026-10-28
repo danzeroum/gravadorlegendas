@@ -12,6 +12,7 @@ class TestShortcuts:
             "toggle_recording",
             "save_transcription",
             "clear_transcription",
+            "import_file",
             "open_settings",
             "close_secondary",
         }

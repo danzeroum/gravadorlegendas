@@ -66,6 +66,7 @@ def test_mp4_like_input_is_decoded_and_split_by_speaker(audio):
     assert model.kwargs["word_timestamps"] is True
     assert model.path.endswith(".wav")  # Whisper e diarizador leem o mesmo WAV
     assert diar.calls[0]["num_speakers"] == 2
+    assert res.speakers == {"SPEAKER_00": "Participante A", "SPEAKER_01": "Participante B"}
     assert res.duration_s == pytest.approx(2.0, abs=0.06)
 
 
@@ -126,7 +127,7 @@ def test_cli_diarize_writes_speaker_labels_with_names(audio, tmp_path, monkeypat
     names.write_text(json.dumps({"SPEAKER_00": {"name": "Juliana", "color": "#f00"}}))
     assert tf.main([str(audio), "--diarize", "--speaker-map", str(names)]) == 0
     srt = audio.with_suffix(".srt").read_text(encoding="utf-8")
-    assert "[Juliana] Bom dia." in srt and "[SPEAKER_01] Oi, tudo?" in srt
+    assert "[Juliana] Bom dia." in srt and "[Participante B] Oi, tudo?" in srt
     txt = audio.with_suffix(".txt").read_text(encoding="utf-8")
     assert "Juliana: Bom dia." in txt
 
@@ -145,3 +146,10 @@ def test_speaker_map_accepts_plain_names(tmp_path):
     p = tmp_path / "m.json"
     p.write_text(json.dumps({"SPEAKER_00": "Ana"}))
     assert tf.load_speaker_map(str(p)) == {"SPEAKER_00": "Ana"}
+
+
+def test_cli_labels_raw_keeps_diarization_ids(audio, monkeypatch):
+    monkeypatch.setattr(tf, "load_model", lambda *a: FakeWhisper())
+    monkeypatch.setattr("src.audio.offline_diarizer.OfflineDiarizer", lambda: FakeDiarizer())
+    assert tf.main([str(audio), "--diarize", "--labels", "raw", "--force"]) == 0
+    assert "[SPEAKER_00] Bom dia." in audio.with_suffix(".srt").read_text(encoding="utf-8")

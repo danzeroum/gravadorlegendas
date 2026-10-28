@@ -23,9 +23,10 @@ costuma dar resultado melhor (mais lento).
 
 ``--diarize`` separa os falantes pela voz (pyannote.audio; exige o extra
 ``.[diarization]`` e token Hugging Face) e atribui cada palavra a um falante;
-as legendas saem como ``[SPEAKER_00] texto``. ``--speaker-map`` troca os
-rótulos por nomes: JSON ``{"SPEAKER_00": "Juliana"}`` ou o formato do painel
-Falantes (``{"SPEAKER_00": {"name": "Juliana", "color": "..."}}``).
+as legendas saem como ``[Participante A] texto`` (``--labels`` muda o
+estilo). ``--speaker-map`` troca os rótulos por nomes: JSON
+``{"SPEAKER_00": "Juliana"}`` ou o formato do painel Falantes
+(``{"SPEAKER_00": {"name": "Juliana", "color": "..."}}``).
 """
 from __future__ import annotations
 
@@ -107,20 +108,26 @@ def transcribe_with_speakers(model, diarizer, audio_path: Path, *,
                              vad_filter: bool, num_speakers: int | None = None,
                              min_speakers: int | None = None,
                              max_speakers: int | None = None,
-                             ) -> list[CaptionSegment]:
-    """Transcreve com falante por palavra (``src/audio/file_pipeline.py``)."""
+                             label_style: str = "letters",
+                             ) -> tuple[list[CaptionSegment], dict[str, str]]:
+    """Transcreve com falante por palavra (``src/audio/file_pipeline.py``).
+
+    Returns:
+        (legendas, rótulo → nome amigável).
+    """
     from src.audio.file_pipeline import transcribe_audio_file
 
     result = transcribe_audio_file(
         audio_path, model=model, language=language, beam_size=beam_size,
         vad_filter=vad_filter, diarize=True, require_diarization=True,
         num_speakers=num_speakers, min_speakers=min_speakers,
-        max_speakers=max_speakers, diarizer=diarizer,
+        max_speakers=max_speakers, diarizer=diarizer, label_style=label_style,
     )
     for seg in result.segments:
-        print(f"   [{_fmt(seg.start)}] {seg.speaker}: {seg.text}", flush=True)
-    print(f"   👥 {len({s.speaker for s in result.segments if s.speaker})} falante(s)")
-    return result.segments
+        name = result.speakers.get(seg.speaker, seg.speaker)
+        print(f"   [{_fmt(seg.start)}] {name}: {seg.text}", flush=True)
+    print(f"   👥 {len(result.speakers)} falante(s)")
+    return result.segments, result.speakers
 
 
 def write_outputs(segments: list[CaptionSegment], audio_path: Path,
@@ -177,6 +184,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="Nº de falantes, se souber (melhora a separação)")
     parser.add_argument("--min-speakers", type=int)
     parser.add_argument("--max-speakers", type=int)
+    parser.add_argument("--labels", default=settings.speaker_label_style,
+                        choices=["letters", "numbers", "raw"],
+                        help="Rótulos: letters (Participante A, B…), numbers (1, 2…), raw (SPEAKER_00)")
     parser.add_argument("--speaker-map",
                         help="JSON com nomes: {\"SPEAKER_00\": \"Juliana\"}")
     args = parser.parse_args(argv)
@@ -220,14 +230,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\n🎙️  Transcrevendo: {audio_path}")
         t0 = time.monotonic()
         try:
+            names = speaker_names
             if args.diarize:
-                segments = transcribe_with_speakers(
+                segments, labels = transcribe_with_speakers(
                     model, diarizer, audio_path, language=language,
                     beam_size=args.beam_size, vad_filter=not args.no_vad,
                     num_speakers=args.num_speakers,
                     min_speakers=args.min_speakers,
                     max_speakers=args.max_speakers,
+                    label_style=args.labels,
                 )
+                # --speaker-map vence o rótulo automático.
+                names = {**labels, **{k: v for k, v in speaker_names.items() if v}}
             else:
                 segments = transcribe(model, audio_path, language=language,
                                       beam_size=args.beam_size,
@@ -239,7 +253,7 @@ def main(argv: list[str] | None = None) -> int:
         if not segments:
             print("⚠️  Nenhuma fala detectada; nenhum arquivo gerado.")
             continue
-        written = write_outputs(segments, audio_path, formats, speaker_names)
+        written = write_outputs(segments, audio_path, formats, names)
         print(f"✅ {len(segments)} segmentos em {time.monotonic() - t0:.1f}s:")
         for w in written:
             print(f"   {w}")

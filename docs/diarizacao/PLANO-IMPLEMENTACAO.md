@@ -623,45 +623,48 @@ Desenho:
 
 ## 5. Matriz rastreável
 
+Atualizada em 2026-10-28 (sequência mínima até a J). `validated-local` =
+executado e aprovado no ambiente do agente; evidência no `CHANGELOG.md`.
+
 Status conforme a convenção de `docs/qualidade-audio/PLANO-IMPLEMENTACAO.md`.
 
 | ID | Requisito | Frente | Arquivos | Tipo de teste | Status |
 |---|---|---|---|---|---|
-| PRIV-01 | Áudio fora de `tests/fixtures/corpus/audio` reprova o scan | E0 | `scripts/secret_scan_changed_files.py` | sintético/offline | pending |
-| PRIV-02 | RTTM fora do corpus sintético reprova | E0 | idem | sintético/offline | pending |
-| PRIV-03 | Caminho com `voiceprint` reprova | E0 | idem, `.gitignore` | sintético/offline | pending |
-| FILA-01 | Whisper e diarizador recebem todos os chunks | E1 | `src/audio/manager.py` | integração-real-lib | pending |
-| FILA-02 | Diarizador recebe áudio pré-RNNoise | E1 | idem | integração-real-lib | pending |
-| AVL-01 | `cp_wer` correto e invariante a permutação | H1 | `tests/fidelity/text_metrics.py` | sintético/offline | pending |
-| AVL-02 | `corpus_real init` recusa diretório no repo | H1 | `scripts/corpus_real.py` | sintético/offline | pending |
-| AVL-03 | `corpus_real verify` detecta hash, consentimento e prazo | H1 | idem | sintético/offline | pending |
-| AVL-04 | `eval_diarization --compare` falha em regressão | H1 | `scripts/eval_diarization.py` | sintético/offline | pending |
-| AVL-05 | Baseline do pipeline atual registrado | H1 | `CHANGELOG.md` | integração-real-lib | pending |
-| DIA-04 | `make_exclusive` sem sobreposição na saída | E | `src/audio/offline_diarizer.py` | sintético/offline | pending |
-| DIA-05 | Rótulos normalizados e estáveis | E | idem | sintético/offline | pending |
-| DIA-06 | `check_ready` acionável e sem vazar token | E | idem | sintético/offline | pending |
-| DIA-07 | `diarize_file` delega ao offline mantendo contrato | E | `src/audio/diarize.py` | sintético/offline | pending |
-| DIA-08 | SRT/VTT/TXT com falante; sem falante byte-exato ao atual | E | `subtitle_exporter.py`, `models.py` | sintético/offline | pending |
-| DIA-09 | pyannote real em `two_speakers_no_overlap` dentro do orçamento | E | `tests/fidelity/test_diarization_der.py` | requer-modelo-hf | pending |
-| ALN-01 | Palavra → falante pelo ponto médio | F | `src/audio/speaker_assignment.py` | sintético/offline | pending |
-| ALN-02 | Tolerância e `None` em gap longo | F | idem | sintético/offline | pending |
-| ALN-03 | Agrupamento por falante/pausa/duração | F | idem | sintético/offline | pending |
-| ALN-04 | Lote com 2 falantes gera 2 rótulos (regressão ACH-03) | F | `src/audio/manager.py` | integração-real-lib | pending |
-| ALN-05 | `transcribe_file --diarize` usa timestamps por palavra | F | `scripts/transcribe_file.py` | sintético/offline | pending |
-| ALN-06 | `OverlapCounter` sweep line, só falantes distintos | F | `src/audio/metrics.py` | sintético/offline | pending |
+| PRIV-01 | Áudio fora de `tests/fixtures/corpus/audio` reprova o scan | E0 | `scripts/secret_scan_changed_files.py` | sintético/offline | **validated-local** |
+| PRIV-02 | RTTM fora do corpus sintético reprova | E0 | idem | sintético/offline | **validated-local** |
+| PRIV-03 | Caminho com `voiceprint` reprova | E0 | idem, `.gitignore` | sintético/offline | **validated-local** |
+| FILA-01 | Whisper e diarizador recebem todos os chunks | E1 | `src/audio/manager.py` | integração-real-lib | **validated-local** |
+| FILA-02 | Diarizador recebe áudio pré-RNNoise | E1 | idem | integração-real-lib | **validated-local** |
+| AVL-01 | `cp_wer` correto e invariante a permutação | H1 | `tests/fidelity/text_metrics.py` | sintético/offline | **validated-local** |
+| AVL-02 | `corpus_real init` recusa diretório no repo | H1 | `scripts/corpus_real.py` | sintético/offline | **validated-local** |
+| AVL-03 | `corpus_real verify` detecta hash, consentimento e prazo | H1 | idem | sintético/offline | **validated-local** |
+| AVL-04 | `eval_diarization --compare` falha em regressão | H1 | `scripts/eval_diarization.py` | sintético/offline | **validated-local** |
+| AVL-05 | Baseline do pipeline atual registrado | H1 | `CHANGELOG.md` | integração-real-lib | **skipped-no-model** |
+| DIA-04 | `make_exclusive` sem sobreposição na saída | E | `src/audio/offline_diarizer.py` | sintético/offline | **validated-local** |
+| DIA-05 | Rótulos normalizados e estáveis | E | idem | sintético/offline | **validated-local** |
+| DIA-06 | `check_ready` acionável e sem vazar token | E | idem | sintético/offline | **validated-local** |
+| DIA-07 | `diarize_file` delega ao offline mantendo contrato | E | `src/audio/diarize.py` | sintético/offline | **validated-local** |
+| DIA-08 | SRT/VTT/TXT com falante; sem falante byte-exato ao atual | E | `subtitle_exporter.py`, `models.py` | sintético/offline | **validated-local** |
+| DIA-09 | pyannote real em `two_speakers_no_overlap` dentro do orçamento | E | `tests/fidelity/test_diarization_der.py` | requer-modelo-hf | **skipped-no-model** |
+| ALN-01 | Palavra → falante pelo ponto médio | F | `src/audio/speaker_assignment.py` | sintético/offline | **validated-local** |
+| ALN-02 | Tolerância e `None` em gap longo | F | idem | sintético/offline | **validated-local** |
+| ALN-03 | Agrupamento por falante/pausa/duração | F | idem | sintético/offline | **validated-local** |
+| ALN-04 | Lote com 2 falantes gera 2 rótulos (regressão ACH-03) | F | `src/audio/manager.py` | integração-real-lib | **validated-local** |
+| ALN-05 | `transcribe_file --diarize` usa timestamps por palavra | F | `scripts/transcribe_file.py` | sintético/offline | **validated-local** |
+| ALN-06 | `OverlapCounter` sweep line, só falantes distintos | F | `src/audio/metrics.py` | sintético/offline | **validated-local** |
 | FUS-01 | Mixer ativo ainda grava faixas brutas | G | `src/audio/manager.py` | integração-real-lib | pending |
 | FUS-02 | Sidecar de sessão com offset | G | `src/audio/recorder.py` | integração-real-lib | pending |
 | FUS-03 | Merge de faixas com offset | G | `src/audio/dual_track.py` | sintético/offline | pending |
 | FUS-04 | Dedupe de vazamento mic←alto-falante | G | idem | sintético/offline | pending |
 | FUS-05 | Fixture determinística de duas faixas | G | `scripts/gen_fidelity_fixtures.py` | sintético/offline | pending |
 | FUS-06 | Confusão cai no cenário de duas faixas (medido) | G | `eval_diarization.py` | requer-modelo-hf | pending |
-| IMP-01 | mp3/m4a/mp4/ogg/opus/flac/webm → WAV 16 kHz mono via PyAV | J | `src/audio/file_pipeline.py` | integração-real-lib | pending |
-| IMP-02 | Pipeline de arquivo compartilhado por CLI e UI | J | idem, `scripts/transcribe_file.py` | sintético/offline | pending |
-| IMP-03 | Rótulos Participante A, B, C por ordem de fala | J | `src/audio/speaker_labels.py` | sintético/offline | pending |
-| IMP-04 | Sem diarização disponível → transcreve e avisa | J | `src/audio/file_pipeline.py` | sintético/offline | pending |
-| IMP-05 | Botão Importar + `Ctrl+O`, bloqueado durante gravação | J | `src/ui/app.py`, `recording_controls.py`, `shortcuts.py` | sintético/offline | pending |
-| IMP-06 | Progresso e cancelamento sem travar a UI | J | idem | integração-real-lib | pending |
-| IMP-07 | Resultado popula transcrição, painel Falantes e exportações | J | `results_panel.py`, `subtitle_exporter.py` | sintético/offline | pending |
+| IMP-01 | mp3/m4a/mp4/ogg/opus/flac/webm → WAV 16 kHz mono via PyAV | J | `src/audio/file_pipeline.py` | integração-real-lib | **validated-local** |
+| IMP-02 | Pipeline de arquivo compartilhado por CLI e UI | J | idem, `scripts/transcribe_file.py` | sintético/offline | **validated-local** |
+| IMP-03 | Rótulos Participante A, B, C por ordem de fala | J | `src/audio/speaker_labels.py` | sintético/offline | **validated-local** |
+| IMP-04 | Sem diarização disponível → transcreve e avisa | J | `src/audio/file_pipeline.py` | sintético/offline | **validated-local** |
+| IMP-05 | Botão Importar + `Ctrl+O`, bloqueado durante gravação | J | `src/ui/app.py`, `recording_controls.py`, `shortcuts.py` | sintético/offline | **validated-local** |
+| IMP-06 | Progresso e cancelamento sem travar a UI | J | idem | integração-real-lib | **validated-local** |
+| IMP-07 | Resultado popula transcrição, painel Falantes e exportações | J | `results_panel.py`, `subtitle_exporter.py` | sintético/offline | **validated-local** |
 | REL-01 | Seção `diarization` opcional no schema | H2 | `schemas/…v1.json` | sintético/offline | pending |
 | REL-02 | Report incorpora `eval_diarization` | H2 | `build_fidelity_report.py` | sintético/offline | pending |
 | REL-03 | Nightly publica métricas de diarização | H2 | `audio-fidelity.yml` | requer-modelo-hf | pending |

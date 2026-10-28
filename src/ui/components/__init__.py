@@ -6,6 +6,7 @@ from src.ui.components.results_panel import ResultsPanel
 from src.ui.components.status_bar import StatusBar
 from src.ui.components.toast import Toast
 from src.ui.components.settings_dialog import SettingsDialog
+from src.ui.components.import_dialog import ImportDialog
 
 __all__ = [
     "Tooltip",
@@ -16,4 +17,5 @@ __all__ = [
     "StatusBar",
     "Toast",
     "SettingsDialog",
+    "ImportDialog",
 ]

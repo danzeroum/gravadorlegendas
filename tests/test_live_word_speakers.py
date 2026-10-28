@@ -39,10 +39,10 @@ def _run(monkeypatch, word_timestamps):
 def test_transcriber_emits_absolute_words_when_enabled(monkeypatch):
     model, result = _run(monkeypatch, True)
     assert model.kwargs["word_timestamps"] is True
-    assert result["words"][0] == {"start": 2.5, "end": 2.9, "text": "w0"}
+    assert result["words"][0] == {"start": 2.5, "end": 2.9, "text": " w0"}
     # A 4ª palavra (2.0–2.4 relativo) começa no fim do lote (4.0 s absoluto)
     # e é cortada pelo mesmo limite aplicado aos segmentos.
-    assert [w["text"] for w in result["words"]] == ["w0", "w1", "w2"]
+    assert [w["text"] for w in result["words"]] == [" w0", " w1", " w2"]
 
 
 def test_transcriber_has_no_words_key_when_disabled(monkeypatch):

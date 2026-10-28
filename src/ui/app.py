@@ -2,7 +2,7 @@
 
 Layout:
 - Header: título + status pill + tema + configurações
-- RecordingControls: seletor PipeWire + ▶/■ principal + timer + diarização
+- RecordingControls: seletor PipeWire + 📂 importar + ▶/■ principal + timer + diarização
 - TranscriptionPanel: área central flexível com Copiar/Salvar/Exportar/Limpar
 - ResultsPanel (lateral, recolhível): Tradução / Resumo / Resposta / Falantes
 - Toast: notificações temporárias
@@ -12,6 +12,10 @@ Layout:
 Fluxo prioritário:
     Origem PipeWire → Iniciar/Parar → Transcrição ao vivo → Salvar/Copiar/Exportar
 Tradução, Resumo, Resposta e IA ficam no painel lateral sob demanda.
+
+Importação (docs/diarizacao, Frente J): 📂/Ctrl+O abre um áudio ou vídeo
+gravado (celular, WhatsApp, Teams…), transcreve em processo separado e
+separa as vozes em "Participante A, B, C" (renomeáveis no painel Falantes).
 """
 import os
 import shutil
@@ -19,6 +23,7 @@ import subprocess
 import sys
 import time
 import threading
+import tkinter.filedialog as tkfiledialog
 import tkinter.messagebox as tkmsg
 import customtkinter as ctk
 
@@ -38,9 +43,12 @@ from src.ui.theme import (
 )
 from src.ui.shortcuts import SHORTCUTS
 from src.ui.view_models.recording_state import RecordingState, RecordingStateMachine, format_duration
+from src.ui.view_models.import_job import (
+    FILE_TYPES, ImportJob, format_transcript_lines, progress_text,
+)
 from src.ui.components import (
     Header, RecordingControls, TranscriptionPanel,
-    ResultsPanel, StatusBar, Toast, SettingsDialog,
+    ResultsPanel, StatusBar, Toast, SettingsDialog, ImportDialog,
 )
 
 
@@ -84,6 +92,11 @@ class MainWindow:
 
         # Metadados de dispositivos (label -> meta)
         self._audio_devices_meta: list[dict] = []
+
+        # Importação de arquivo (Frente J)
+        self._import_job: ImportJob | None = None
+        self._last_import = None        # FileTranscript do último arquivo
+        self._last_import_base = None   # base dos .txt/.srt/.vtt gravados
 
         # UI - ESCALA ANTES de criar CTk()
         # Em Linux/HiDPI as constantes de tema (fontes, dimensoes) sao
@@ -180,6 +193,7 @@ class MainWindow:
             on_toggle_recording=self._on_toggle_recording,
             on_refresh_devices=self._refresh_audio_devices,
             on_diarize_changed=lambda: None,  # captura via var do widget
+            on_import=self._on_import_clicked,
         )
         self._controls.grid(row=1, column=0, sticky="ew")
 
@@ -237,6 +251,8 @@ class MainWindow:
             self._on_save(self._transcription.get_text())
         elif action == "clear_transcription":
             self._on_clear(self._transcription)
+        elif action == "import_file":
+            self._on_import_clicked()
         elif action == "open_settings":
             self._open_settings()
         elif action == "close_secondary":
@@ -439,6 +455,9 @@ class MainWindow:
     # -------------------------------------------------------------------------
 
     def _on_toggle_recording(self):
+        if self._import_job is not None:  # botão já fica bloqueado; vale p/ Ctrl+R
+            self._toast.show("Aguarde a importação terminar (ou cancele) para gravar.", kind="warn")
+            return
         state = self._machine.state
         if state == RecordingState.IDLE:
             self._start_recording()
@@ -490,6 +509,8 @@ class MainWindow:
         self._header.set_status(self._machine.status_text, self._machine.status_kind)
 
         # Estado inicial
+        self._last_import = None
+        self._last_import_base = None
         self._audio_transcript_lines.clear()
         self._transcription.clear()  # limpa e mostra placeholder "Gravando..."
         self._transcription.set_export_enabled(False)
@@ -586,6 +607,10 @@ class MainWindow:
 
     def _on_export(self):
         from pathlib import Path
+        # Arquivo importado: aplica os nomes atuais do painel Falantes à tela e
+        # regrava .txt/.srt/.vtt antes de exportar o Markdown.
+        if self._last_import is not None:
+            self._refresh_import_outputs()
         lines = self._audio_transcript_lines
         if not lines:
             return
@@ -619,6 +644,137 @@ class MainWindow:
         panel.clear()
         self._audio_transcript_lines.clear()
         self._toast.show("Transcrição limpa.", kind="ok")
+
+    # -------------------------------------------------------------------------
+    # Importar arquivo de áudio/vídeo (Frente J)
+    # -------------------------------------------------------------------------
+
+    def _on_import_clicked(self):
+        if self._import_job is not None:
+            self._import_job.cancel()
+            self._header.set_status("● Cancelando importação…", "busy")
+            return
+        if self._machine.state != RecordingState.IDLE:
+            self._toast.show("Pare a gravação antes de importar um arquivo.", kind="warn")
+            return
+        path = tkfiledialog.askopenfilename(
+            parent=self._root, title="Importar áudio ou vídeo", filetypes=FILE_TYPES,
+        )
+        if not path:
+            return
+        ImportDialog(self._root, path,
+                     on_confirm=lambda options: self._start_import(path, options))
+
+    def _start_import(self, path: str, options: dict):
+        job = ImportJob(path, options)
+        try:
+            job.start()
+        except Exception as e:
+            self._toast.show(f"Não foi possível iniciar a importação: {e}", kind="error")
+            return
+        self._import_job = job
+        self._last_import = None
+        self._controls.set_importing(True)
+        self._controls.clear_error()
+        self._controls.set_timer("0%")
+        self._header.set_status("● Importando…", "busy")
+        self._audio_transcript_lines.clear()
+        self._transcription.clear()
+        self._transcription.set_export_enabled(False)
+        self._statusbar.set_file(path)
+        self._poll_import()
+
+    def _poll_import(self):
+        job = self._import_job
+        if job is None:
+            return
+        for event in job.poll():
+            kind = event["type"]
+            if kind == "progress":
+                self._header.set_status(
+                    f"● {progress_text(event['progress'], event['stage'])}", "busy")
+                self._controls.set_timer(f"{int(round(event['progress'] * 100))}%")
+            elif kind == "result":
+                self._finish_import(event["transcript"])
+            elif kind == "cancelled":
+                self._toast.show("Importação cancelada.", kind="warn")
+            elif kind == "error":
+                self._controls.set_error(f"Erro: {event['message']}")
+                self._toast.show(f"Erro ao importar: {event['message']}", kind="error")
+        if job.done:
+            self._import_job = None
+            self._controls.set_importing(False)
+            self._controls.apply_state(self._machine)
+            self._controls.reset_timer()
+            self._header.set_status(self._machine.status_text, self._machine.status_kind)
+            return
+        self._root.after(200, self._poll_import)
+
+    def _finish_import(self, transcript):
+        import os
+        from src.audio.file_pipeline import output_base_for, write_transcript_files
+
+        if not transcript.segments:
+            self._toast.show("Nenhuma fala detectada no arquivo.", kind="warn")
+            return
+        self._last_import = transcript
+        if transcript.speakers:
+            # Rótulos valem por arquivo: o painel Falantes recomeça com
+            # "Participante A, B…" deste arquivo.
+            self._results.load_speaker_map(
+                {sid: {"name": name, "color": ""} for sid, name in transcript.speakers.items()})
+            self._save_speaker_map()
+        self._render_import(transcript)
+        base = output_base_for(transcript.source, settings.recording_dir)
+        try:
+            written = write_transcript_files(transcript, base, self._speaker_names())
+        except Exception as e:
+            self._toast.show(f"Transcrito, mas falhou ao salvar as legendas: {e}", kind="error")
+            return
+        self._last_import_base = base
+        self._statusbar.set_file(str(written[0]))
+        self._transcription.set_export_enabled(True)
+        files = ", ".join(os.path.basename(str(p)) for p in written)
+        if transcript.diarized:
+            self._results.open("Falantes")
+            self._toast.show(
+                f"✓ {len(transcript.speakers)} participante(s). Legendas salvas: {files}. "
+                "Renomeie no painel Falantes e clique Exportar para atualizar os arquivos.",
+                kind="ok", timeout_ms=8000,
+            )
+        elif transcript.diarization_error:
+            self._toast.show(
+                f"Transcrito sem separar participantes — {transcript.diarization_error}",
+                kind="warn", sticky=True,
+            )
+        else:
+            self._toast.show(f"✓ Transcrito. Legendas salvas: {files}", kind="ok")
+
+    def _render_import(self, transcript):
+        self._transcription.clear()
+        self._audio_transcript_lines = format_transcript_lines(
+            transcript, self._results.get_speaker_display_name)
+        for line in self._audio_transcript_lines:
+            self._transcription.append_line(line)
+            self._session_feed_audio_line(line)
+
+    def _speaker_names(self) -> dict[str, str]:
+        return {sid: info["name"] for sid, info in self._results.get_speaker_map().items()}
+
+    def _refresh_import_outputs(self):
+        from src.audio.file_pipeline import write_transcript_files
+
+        transcript = self._last_import
+        self._transcription.clear()
+        self._audio_transcript_lines = format_transcript_lines(
+            transcript, self._results.get_speaker_display_name)
+        for line in self._audio_transcript_lines:
+            self._transcription.append_line(line)
+        if self._last_import_base is not None:
+            try:
+                write_transcript_files(transcript, self._last_import_base, self._speaker_names())
+            except Exception as e:
+                self._toast.show(f"Falha ao atualizar as legendas: {e}", kind="error")
 
     # -------------------------------------------------------------------------
     # Ações do painel de resultados
@@ -770,10 +926,14 @@ def _shutdown(window, store) -> None:
     """Encapsula a lógica de shutdown de MainWindow para testes headless.
 
     Ordem:
-      1. Parar AudioManager se houver captura ativa.
-      2. Parar SessionManager/OCR.
-      3. Persistir geometria da janela.
+      1. Encerrar importação de arquivo em andamento (processo separado).
+      2. Parar AudioManager se houver captura ativa.
+      3. Parar SessionManager/OCR.
+      4. Persistir geometria da janela.
     """
+    job = getattr(window, "_import_job", None)
+    if job is not None:
+        job.terminate()
     if window._audio_manager.is_running:
         window._audio_manager.stop()
     window.session.stop()

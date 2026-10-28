@@ -202,3 +202,71 @@ Ganho de DER/cpWER **não medido** neste ambiente (sem token HF): rodar
 token e `--compare` antes de declarar ganho (D-023).
 
 **Requisitos:** ALN-01..06 → `validated-local`.
+
+---
+
+## 2026-10-28 — Frente J: importar e transcrever arquivo na interface
+
+**Descrição:**
+- `src/audio/speaker_labels.py`: "Participante A, B, C…" na ordem da primeira
+  fala (`letters`/`numbers`/`raw`; após Z vem AA). Config
+  `SPEAKER_LABEL_STYLE`, `SPEAKER_LABEL_PREFIX` (validadas só quando
+  presentes, para não quebrar validação de configuração parcial).
+- `file_pipeline.py`: `speakers` amigáveis no resultado; `run_import_job`
+  (alvo do processo `spawn`), serialização, `output_base_for` (nunca
+  sobrescreve: `nome_2`, `nome_3`…) e `write_transcript_files`.
+- `src/ui/view_models/import_job.py` (`ImportJob`, sem UI): inicia o
+  processo, converte eventos, cancelamento cooperativo com `terminate` após
+  5 s, detecta processo morto sem evento final (checando o estado **antes**
+  de drenar a fila, sem corrida com um resultado publicado no fim).
+- UI: botão **📂 Importar áudio…** + `Ctrl+O`; diálogo com "Separar
+  participantes", nº de participantes (validado 1–20, opcional) e modelo;
+  progresso no cabeçalho e no timer; botão vira **Cancelar importação**;
+  gravar bloqueado durante a importação (botão e `Ctrl+R`); resultado no
+  painel como `[HH:MM:SS] ● Participante A: texto`; painel Falantes
+  recarregado com os rótulos do arquivo; `.txt/.srt/.vtt` em
+  `RECORDING_DIR`; **Exportar .md** reaplica os nomes renomeados à tela e
+  regrava os arquivos; sem diarização, aviso fixo com o motivo; fechamento
+  da janela encerra a importação.
+- CLI: `--labels letters|numbers|raw` (`--speaker-map` tem prioridade).
+- Junção de palavras respeita a marcação do Whisper (espaço inicial = nova
+  palavra): corrigiu "tisco -ci" → "tisco-ci", achado no teste real abaixo.
+- `pyproject.toml`: `av` explícito no extra `audio`.
+- README: seção "Importar um áudio gravado", atalho `Ctrl+O`, `--diarize`.
+
+**Arquivos:** os acima + `src/ui/components/import_dialog.py`,
+`src/ui/components/recording_controls.py`, `src/ui/shortcuts.py`,
+`src/ui/app.py`, `tests/test_speaker_labels.py`, `tests/test_import_job.py`,
+`tests/test_ui_import_flow.py`, `tests/test_ui_shortcuts.py`,
+`tests/test_config_validation.py`.
+
+**Comandos e evidência:**
+
+```text
+pytest tests/ -q   (venv de desenvolvimento, com PyAV/pyannote/xvfb)
+  -> 2 failed (test_ocr: Tesseract ausente), 630 passed, 40 skipped, 1 xfailed
+# Réplica do job "test" do CI (só requirements.txt):
+  -> 2 failed (test_ocr), 389 passed, 46 skipped
+# Réplica do job "fidelity" do CI:
+  -> 170 passed, 6 skipped
+python scripts/gen_fidelity_fixtures.py --check -> Corpus determinístico: 100% regenerável.
+python scripts/fidelity_golden.py verify      -> GOLDEN VERIFIED
+python scripts/secret_scan_changed_files.py --tracked-paths -> nenhum áudio fora do corpus
+```
+
+Teste real ponta a ponta (fora do repo, áudio sintético espeak-ng com duas
+vozes pt-BR, 15,3 s, `.mp3`):
+- `transcribe_file.py conversa.mp3 --diarize` sem token → sai com código 2 e
+  a mensagem de como configurar `HF_TOKEN`, sem carregar o Whisper.
+- `ImportJob` com processo `spawn` + Whisper `base` real: progresso 0→100 %,
+  3 segmentos transcritos em 12,4 s (CPU), `diarized=False` com o motivo.
+- Pipeline com Whisper real + turnos de referência (diarizador oráculo):
+  30/30 palavras com falante; 3 legendas A/B/A corretas.
+- Janela real sob Xvfb: diálogo, estado "Cancelar importação" + progresso,
+  resultado no painel e `.txt/.srt/.vtt` gravados (capturas de tela na
+  sessão do agente, não versionadas).
+
+**Não validado aqui:** separação real de vozes com pyannote (exige
+`HF_TOKEN` e aceite dos termos) e qualidade em gravação humana de celular.
+
+**Requisitos:** IMP-01..07 → `validated-local`.

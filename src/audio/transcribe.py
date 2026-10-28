@@ -243,10 +243,12 @@ class TranscriberProcess(multiprocessing.Process):
                 })
                 text_parts.append(seg_text)
                 for w in (getattr(seg, "words", None) or []):
-                    w_text = (w.word or "").strip()
+                    # Mantém o espaço inicial (marca de início de palavra
+                    # do Whisper) para juntar pedaços corretamente.
+                    w_text = w.word or ""
                     w_start = round(audio_offset + float(w.start), 3)
                     w_end = round(min(audio_offset + float(w.end), batch_limit), 3)
-                    if w_text and w_end > w_start:
+                    if w_text.strip() and w_end > w_start:
                         word_list.append({"start": w_start, "end": w_end,
                                           "text": w_text})
             text = " ".join(text_parts)
