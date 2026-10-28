@@ -16,8 +16,10 @@ Uso:
     python scripts/eval_diarization.py --compare base.json e.json
 
 Pipelines: ``oracle`` (a própria referência — sanidade do harness),
-``rttm`` (hipóteses externas), ``current`` (``DiarizationProcess.diarize_file``)
-e ``offline`` (``OfflineDiarizer``, Frente E). Os que dependem de modelo
+``rttm`` (hipóteses externas), ``current`` (``DiarizationProcess.diarize_file``),
+``offline`` (``OfflineDiarizer``, Frente E) e ``offline+words`` (transcrição +
+falante por palavra, Frente F — DER sobre as legendas finais e cpWER quando o
+item tem transcrição de referência). Os que dependem de modelo
 exigem o extra ``.[diarization]`` e ``HF_TOKEN``; a falha de um item fica
 registrada no JSON com o motivo, sem derrubar os demais.
 
@@ -138,11 +140,36 @@ def _pipeline_offline(item: dict, opts: argparse.Namespace) -> dict:
             "words": None}
 
 
+_WHISPER = None
+
+
+def _pipeline_offline_words(item: dict, opts: argparse.Namespace) -> dict:
+    """Transcrição + diarização + falante por palavra (Frente F)."""
+    from src.audio.file_pipeline import load_whisper, transcribe_audio_file
+    from src.config import settings
+
+    global _WHISPER
+    if _WHISPER is None:
+        _WHISPER = load_whisper(settings.stt_model, settings.stt_device)
+    result = transcribe_audio_file(
+        item["audio"], model=_WHISPER, diarize=True, require_diarization=True,
+        num_speakers=item["num_speakers"] if opts.oracle_num_speakers else None,
+    )
+    turns: list[dict] = []
+    for seg in result.segments:
+        turns.append({"speaker": seg.speaker, "start": seg.start, "end": seg.end})
+    return {
+        "turns": turns,
+        "words": [{"text": w.text, "speaker": sp} for w, sp in result.words],
+    }
+
+
 PIPELINES: dict[str, Callable[[dict, argparse.Namespace], dict]] = {
     "oracle": _pipeline_oracle,
     "rttm": _pipeline_rttm,
     "current": _pipeline_current,
     "offline": _pipeline_offline,
+    "offline+words": _pipeline_offline_words,
 }
 
 

@@ -39,6 +39,7 @@ from src.audio.metrics import LatencyTracker, OverlapCounter
 from src.audio.recorder import DualTrackRecorder, DualTrackResult
 from src.audio.mixer import AudioMixer
 from src.audio.models import CaptionSegment
+from src.audio.speaker_assignment import Word, assign_words, group_segments
 from src.storage.subtitle_exporter import SubtitleExporter
 from src.config import settings
 
@@ -200,6 +201,8 @@ class AudioManager:
             beam_size=settings.stt_beam_size,
             temperature=settings.stt_temperature,
             vad_filter=settings.stt_vad_filter,
+            # Frente F: palavra com tempo só faz sentido com diarização.
+            word_timestamps=enable_diarization,
         )
         self._transcriber.start()
 
@@ -342,12 +345,10 @@ class AudioManager:
         base = self._subtitle_base
         try:
             Path(base).parent.mkdir(parents=True, exist_ok=True)
-            txt_path = base + ".txt"
-            with open(txt_path, "w", encoding="utf-8") as f:
-                for seg in segments:
-                    f.write(f"[{_format_clock(seg.start)}] {seg.text}\n")
-            self.subtitle_paths.append(txt_path)
             exporter = SubtitleExporter()
+            txt_path = base + ".txt"
+            exporter.save_txt(segments, txt_path)
+            self.subtitle_paths.append(txt_path)
             if settings.export_srt:
                 exporter.save_srt(segments, base + ".srt")
                 self.subtitle_paths.append(base + ".srt")
@@ -501,15 +502,33 @@ class AudioManager:
         if "text" not in result:
             return
 
+        batch = result.get("batch", 0)
+        self._latency.mark_receive(batch)
+
+        # Frente F: com palavras e turnos de diarização, atribui falante por
+        # palavra e emite um trecho por falante. Ao vivo é best effort (os
+        # turnos do diart chegam com atraso); o reprocessamento offline é a
+        # fonte de verdade.
+        words = result.get("words")
+        if words and self._speaker_segments:
+            assigned = assign_words(
+                [Word(w["start"], w["end"], w["text"]) for w in words],
+                list(self._speaker_segments),
+            )
+            groups = group_segments(assigned)
+            if groups:
+                self._caption_segments.extend(groups)
+                if self.on_transcription:
+                    for seg in groups:
+                        self.on_transcription(seg.text, seg.speaker)
+                return
+
         for seg in result.get("segments") or []:
             text = (seg.get("text") or "").strip()
             if text and seg.get("end", 0) > seg.get("start", 0):
                 self._caption_segments.append(
                     CaptionSegment(start=seg["start"], end=seg["end"], text=text)
                 )
-
-        batch = result.get("batch", 0)
-        self._latency.mark_receive(batch)
 
         speaker = self._match_speaker(
             result.get("start", 0), result.get("end", 0)
@@ -532,8 +551,3 @@ class AudioManager:
                 best = seg["speaker"]
                 best_overlap = overlap
         return best
-
-
-def _format_clock(seconds: float) -> str:
-    total = int(seconds)
-    return f"{total // 3600:02d}:{total % 3600 // 60:02d}:{total % 60:02d}"

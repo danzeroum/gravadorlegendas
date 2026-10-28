@@ -77,18 +77,36 @@ class OverlapCounter:
         self._segments.extend(segments)
 
     def _compute(self):
-        """Calcula overlap com base nos segmentos acumulados."""
-        if len(self._segments) < 2:
+        """Calcula overlap com base nos segmentos acumulados.
+
+        Varredura de eventos (+1 no início, −1 no fim) com contador por
+        falante: conta o tempo em que há **dois ou mais falantes
+        distintos** ativos. O(n log n). Segmentos do mesmo falante que se
+        sobrepõem (comuns na saída incremental do diart) não contam, e três
+        falantes simultâneos não contam em dobro.
+        """
+        segs = [s for s in self._segments if s["end"] > s["start"]]
+        if len(segs) < 2:
             return 0.0, 0.0
-        sorted_segs = sorted(self._segments, key=lambda s: s["start"])
-        duration = sorted_segs[-1]["end"] - sorted_segs[0]["start"]
+        duration = max(s["end"] for s in segs) - min(s["start"] for s in segs)
+        # Fim antes de início no mesmo instante: encostar não é sobrepor.
+        events = sorted(
+            [(s["start"], 1, s["speaker"]) for s in segs]
+            + [(s["end"], -1, s["speaker"]) for s in segs],
+            key=lambda e: (e[0], e[1]),
+        )
+        active: dict = {}
         overlap = 0.0
-        for i in range(len(sorted_segs)):
-            for j in range(i + 1, len(sorted_segs)):
-                if sorted_segs[j]["start"] < sorted_segs[i]["end"]:
-                    overlap += min(
-                        sorted_segs[i]["end"], sorted_segs[j]["end"]
-                    ) - sorted_segs[j]["start"]
+        prev_t = events[0][0]
+        for t, delta, speaker in events:
+            if len(active) >= 2:
+                overlap += t - prev_t
+            prev_t = t
+            count = active.get(speaker, 0) + delta
+            if count > 0:
+                active[speaker] = count
+            else:
+                active.pop(speaker, None)
         return overlap, duration
 
     @property

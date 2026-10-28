@@ -156,3 +156,49 @@ conferidos; sem token o carregamento do modelo falha com "gated repo",
 convertido em `DiarizationUnavailable`.
 
 **Requisitos:** DIA-04..08 → `validated-local`; DIA-09 → `skipped-no-model`.
+
+---
+
+## 2026-10-28 — Frente F: atribuição de falante por palavra
+
+**Descrição:**
+- `src/audio/speaker_assignment.py`: `Word`, `assign_words` (ponto médio,
+  tolerância de 0,3 s, sobreposição → quem começou por último, O((n+m) log m))
+  e `group_segments` (quebra por falante, pausa > 1 s ou legenda > 7 s;
+  palavra sem falante não quebra o grupo).
+- Ao vivo: `TranscriberProcess(word_timestamps=...)` emite `"words"` com
+  tempo absoluto; `AudioManager` liga quando a diarização está ativa e
+  emite um trecho por falante (best effort; offline é a fonte de verdade).
+  Exportação ao vivo usa `SubtitleExporter.save_txt` (falante no .txt).
+- `OverlapCounter`: varredura de eventos, só falantes distintos (ACH-05).
+- `src/audio/file_pipeline.py` (`transcribe_audio_file`): decodificar →
+  Whisper com tempo por palavra → diarizar → atribuir → agrupar; progresso
+  e cancelamento; sem diarização disponível, transcreve e explica o motivo.
+  Antecipa J.a (IMP-02/IMP-04) para a CLI e a UI usarem o mesmo código.
+- `scripts/transcribe_file.py`: `--diarize`, `--num-speakers`,
+  `--min-speakers`, `--max-speakers`, `--speaker-map`; `--diarize` falha
+  antes de carregar o Whisper se a diarização não estiver pronta.
+- `scripts/eval_diarization.py`: pipeline `offline+words`.
+
+**Arquivos:** os acima + `tests/test_speaker_assignment.py`,
+`tests/test_live_word_speakers.py`, `tests/test_file_pipeline.py`,
+`tests/test_audio_metrics.py`.
+
+**Comandos:**
+
+```text
+pytest tests/test_speaker_assignment.py -q   -> 12 passed
+pytest tests/test_live_word_speakers.py -q   -> 4 passed
+pytest tests/test_file_pipeline.py -q        -> 10 passed
+pytest tests/test_audio_metrics.py -q        -> 17 passed
+pytest tests/ -q
+  -> 2 failed (test_ocr: Tesseract ausente, preexistente), 588 passed, 44 skipped
+python scripts/eval_diarization.py --corpus tests/fixtures/corpus --pipeline offline+words
+  -> ok=0 erro=4 (DiarizationUnavailable: token do Hugging Face ausente…)
+```
+
+Ganho de DER/cpWER **não medido** neste ambiente (sem token HF): rodar
+`eval_diarization.py --pipeline offline` e `--pipeline offline+words` com
+token e `--compare` antes de declarar ganho (D-023).
+
+**Requisitos:** ALN-01..06 → `validated-local`.
