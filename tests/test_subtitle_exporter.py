@@ -311,3 +311,44 @@ class TestSubtitleExporterSpecialChars:
         # Todos os textos devem estar presentes
         for expected in ["primeiro", "segundo", "terceiro"]:
             assert expected in srt, f"Texto perdido: {expected}"
+
+
+# ---------------------------------------------------------------------------
+# DIA-08 — falante nas legendas (docs/diarizacao, D-019)
+# ---------------------------------------------------------------------------
+
+class TestSpeakerInCaptions:
+    SEGS = [
+        CaptionSegment(start=0.0, end=2.5, text="Bom dia", speaker="SPEAKER_00"),
+        CaptionSegment(start=3.0, end=5.5, text="Oi", speaker="SPEAKER_01"),
+    ]
+
+    def test_unpacking_still_three_fields(self):
+        start, end, text = self.SEGS[0]
+        assert (start, end, text) == (0.0, 2.5, "Bom dia")
+
+    def test_without_speaker_output_unchanged(self):
+        plain = [CaptionSegment(start=s.start, end=s.end, text=s.text) for s in self.SEGS]
+        exp = SubtitleExporter()
+        assert exp.to_srt(plain) == (
+            "1\n00:00:00,000 --> 00:00:02,500\nBom dia\n\n"
+            "2\n00:00:03,000 --> 00:00:05,500\nOi\n"
+        )
+        assert exp.to_txt(plain) == "[00:00:00] Bom dia\n[00:00:03] Oi\n"
+
+    def test_srt_vtt_txt_use_mapped_names_with_label_fallback(self):
+        exp = SubtitleExporter()
+        names = {"SPEAKER_00": "Juliana"}
+        srt = exp.to_srt(self.SEGS, names)
+        assert "[Juliana] Bom dia" in srt and "[SPEAKER_01] Oi" in srt
+        vtt = exp.to_vtt(self.SEGS, names)
+        assert vtt.startswith("WEBVTT") and "[Juliana] Bom dia" in vtt
+        assert exp.to_txt(self.SEGS, names) == (
+            "[00:00:00] Juliana: Bom dia\n[00:00:03] SPEAKER_01: Oi\n"
+        )
+
+    def test_save_txt_utf8(self, tmp_path):
+        path = tmp_path / "t.txt"
+        SubtitleExporter().save_txt(
+            [CaptionSegment(0.0, 1.0, "Transcrição", "S")], str(path), {"S": "Conceição"})
+        assert path.read_text(encoding="utf-8") == "[00:00:00] Conceição: Transcrição\n"

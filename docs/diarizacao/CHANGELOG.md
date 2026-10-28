@@ -119,3 +119,40 @@ A medição do pipeline atual fica para quem tiver token:
 Corpus real: nenhum disponível neste ambiente (esperado — R3).
 
 **Requisitos:** AVL-01..04 → `validated-local`; AVL-05 → `skipped-no-model`.
+
+---
+
+## 2026-10-28 — Frente E: diarizador offline + falante nas legendas
+
+**Descrição:** `OfflineDiarizer` (pyannote.audio 3.x/4.x), `make_exclusive`,
+`normalize_labels`, `check_ready` com mensagens acionáveis; `diarize_file`
+delega a ele (D-018). `CaptionSegment.speaker`; exportador SRT/VTT/TXT com
+nomes (D-019). Config `DIARIZATION_MODEL`, `DIARIZATION_DEVICE`,
+`DIARIZATION_EXCLUSIVE`. Teste real DIA-03 passou a exigir `pyannote.audio`
+(não diart) e ganhou DIA-09 (DER do `OfflineDiarizer` real).
+
+Ajuste de ordem: a flag `--diarize` do `transcribe_file.py` entra na Frente
+F, já com atribuição por palavra, para não implementar a atribuição por
+segmento e trocá-la em seguida.
+
+**Arquivos:** `src/audio/offline_diarizer.py`, `src/audio/diarize.py`,
+`src/audio/models.py`, `src/storage/subtitle_exporter.py`, `src/config.py`,
+`.env.example`, `tests/test_offline_diarizer.py`,
+`tests/test_subtitle_exporter.py`, `tests/fidelity/test_diarization_der.py`.
+
+**Comandos:**
+
+```text
+pytest tests/test_offline_diarizer.py -q            -> 17 passed
+pytest tests/fidelity/test_diarization_der.py -q -rs
+  -> 33 passed, 2 skipped (sem HF_TOKEN — DIA-03 e DIA-09)
+pytest tests/ -q
+  -> 2 failed (test_ocr: Tesseract ausente, preexistente), 555 passed, 47 skipped
+```
+
+Validação contra a API real: pyannote.audio 4.0.7 instalado;
+`Pipeline.from_pretrained(..., token=, cache_dir=)` e `DiarizeOutput`
+conferidos; sem token o carregamento do modelo falha com "gated repo",
+convertido em `DiarizationUnavailable`.
+
+**Requisitos:** DIA-04..08 → `validated-local`; DIA-09 → `skipped-no-model`.

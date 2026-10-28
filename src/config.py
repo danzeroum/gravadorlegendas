@@ -147,6 +147,17 @@ class Settings:
         "EXPORT_VTT", "true"
     ).lower() in ("1", "true", "yes")
 
+    # --- Diarização offline (docs/diarizacao, Frente E) ---
+    # Modelo pyannote para diarizar arquivos. Vazio = padrão da versão
+    # instalada (community-1 no pyannote.audio 4.x, 3.1 no 3.x).
+    diarization_model: str = os.getenv("DIARIZATION_MODEL", "")
+    # auto | cpu | cuda
+    diarization_device: str = os.getenv("DIARIZATION_DEVICE", "auto")
+    # Uma pessoa por instante (legenda sem falas simultâneas).
+    diarization_exclusive: bool = os.getenv(
+        "DIARIZATION_EXCLUSIVE", "true"
+    ).lower() in ("1", "true", "yes")
+
     @property
     def has_ollama(self) -> bool:
         return bool(self.ollama_username and self.ollama_password)

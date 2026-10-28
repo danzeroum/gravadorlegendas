@@ -1,7 +1,8 @@
 """Diarização de falantes offline e streaming.
 
 Processa áudio para identificar diferentes falantes usando
-diart (streaming) ou pyannote.audio (offline em arquivo WAV).
+diart (streaming) ou pyannote.audio (offline em arquivo WAV, via
+``src/audio/offline_diarizer.py``).
 """
 import multiprocessing
 import queue
@@ -58,31 +59,33 @@ class DiarizationProcess(multiprocessing.Process):
             self._output.put({"error": f"Erro ao carregar pipeline diart: {e}"})
             return False
 
-    def diarize_file(self, wav_path: str) -> list[dict]:
+    def diarize_file(self, wav_path: str, **kwargs) -> list[dict]:
         """Processa arquivo WAV completo e retorna segmentos com falantes.
+
+        Delega ao :class:`~src.audio.offline_diarizer.OfflineDiarizer`
+        (pyannote.audio, D-018); o diart fica só no streaming (``run``).
+        Erros vão para a fila de saída como ``{"error": ...}``.
 
         Args:
             wav_path: Caminho para arquivo WAV mono 16kHz.
+            **kwargs: Repassados a ``OfflineDiarizer.diarize``
+                (``num_speakers``, ``min_speakers``, ``max_speakers``,
+                ``exclusive``).
 
         Returns:
             Lista de dicts: {speaker, start, end}.
         """
-        if not self._load_pipeline():
-            return []
         try:
-            source = self._AudioFileSource(wav_path)
-            segmentation = self._pipeline(source)
-            segments = []
-            for turn, _, speaker in segmentation.itertracks(yield_label=True):
-                segments.append({
-                    "speaker": str(speaker),
-                    "start": round(turn.start, 2),
-                    "end": round(turn.end, 2),
-                })
-            return segments
+            from src.audio.offline_diarizer import OfflineDiarizer
+            turns = OfflineDiarizer().diarize(wav_path, **kwargs)
         except Exception as e:
             self._output.put({"error": f"diarize_file error: {e}"})
             return []
+        return [
+            {"speaker": t.speaker, "start": round(t.start, 2),
+             "end": round(t.end, 2)}
+            for t in turns
+        ]
 
     def run(self):
         """Loop principal: processa chunks e emite segmentos."""
