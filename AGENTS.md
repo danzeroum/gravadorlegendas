@@ -94,6 +94,7 @@ Comandos prontos (digite `/` no opencode): `/transcrever`, `/renomear`,
 - `src/audio/file_pipeline.py` — decodificar → Whisper → diarizar → falante por palavra.
 - `src/audio/offline_diarizer.py` — separação de vozes (pyannote.audio).
 - `src/audio/speaker_assignment.py`, `speaker_labels.py` — falante por palavra; "Participante A…".
+- `scripts/extrair_tela.py`, `src/screen_extract/` — respostas lidas de vídeo de tela compartilhada (OCR local; `docs/extracao-tela/`).
 - `src/ui/` — app gráfico (CustomTkinter); `src/audio/manager.py` — gravação ao vivo.
 - `scripts/eval_diarization.py`, `scripts/corpus_real.py` — medir qualidade (DER/cpWER).
 - `docs/diarizacao/` — plano, decisões e histórico; `README.md` — instalação e uso.

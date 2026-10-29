@@ -277,6 +277,25 @@ python scripts/transcribe_file.py reuniao.mp3 --diarize --speaker-map nomes.json
 `nomes.json` é `{"SPEAKER_00": "Juliana", "SPEAKER_01": "Daniel"}`. Detalhes,
 métricas (DER/cpWER) e decisões em `docs/diarizacao/`.
 
+### Extrair respostas de uma tela compartilhada (vídeo)
+
+Para gravações em que a tela mostra um formulário (ex.: assessment do
+OneTrust), `scripts/extrair_tela.py` lê o vídeo **100% local** (Tesseract;
+nada sai da máquina), descarta frames repetidos/borrados e guarda o último
+estado de cada pergunta e opção marcada:
+
+```bash
+python scripts/extrair_tela.py --verificar                 # PyAV, Pillow, numpy, Tesseract
+python scripts/extrair_tela.py reuniao --calibrar          # salva um frame para achar a região
+python scripts/extrair_tela.py reuniao --regiao 5%,8%,70%,85%
+```
+
+`--regiao` (x,y,largura,altura em pixels ou %) é obrigatório e recorta só a
+tela compartilhada, deixando os rostos de fora. Saída em
+`audios/transcricoes/<nome>_tela.{json,csv,md}` (CSV com `;` e UTF-8 para o
+Excel). Só entra o que apareceu na tela, e OCR/caixa marcada podem errar:
+confira por amostragem. Decisões em `docs/extracao-tela/DECISOES.md`.
+
 ### Diagnóstico de áudio (Linux)
 
 ```bash
